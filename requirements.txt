@@ -1,0 +1,24 @@
+# 数字人文叙事分析 - 依赖
+# Phase 1: 基础层
+spacy>=3.7
+transformers>=4.36
+torch>=2.1
+
+# Phase 2: 网络层
+networkx>=3.2
+matplotlib>=3.8
+pyvis>=0.3
+
+# Phase 3: 情节层
+python-dateutil>=2.8
+jieba>=0.42
+
+# Phase 4: 人物层
+textblob>=0.17
+
+# Phase 5: 叙事层
+# (使用 transformers 即可)
+
+# 工具
+numpy>=1.24
+pandas>=2.0
