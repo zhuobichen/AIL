@@ -3,7 +3,7 @@
 使用 Pydantic 定义核心数据结构，提供强类型校验和自动序列化。
 """
 
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Literal
 from datetime import datetime
 from pydantic import BaseModel, Field
 
@@ -31,10 +31,12 @@ class Relation(BaseModel):
     """人物关系互动"""
     source: str = Field(..., description="发起方/主体")
     target: str = Field(..., description="接收方/客体")
-    type: str = Field(default="association", description="关系类型：hierarchical, collaborative, conflict, social, association")
+    type: str = Field(default="unknown", description="关系类型，例如：朋友、死敌、师徒等")
+    context_snippet: str = Field(default="", description="原著中能体现这段关系的简短原文片段")
     context: str = Field(default="", description="提取该关系的上下文文本")
+    chunk_index: int = Field(default=-1, description="所属文本块的顺序索引，用于时间轴演化分析")
     position: int = Field(default=0, description="在文本中的位置索引")
-    sentiment: float = Field(default=0.5, ge=0.0, le=1.0, description="关系情感极性，0为极度消极，1为极度积极")
+    sentiment: Literal['positive', 'negative', 'neutral'] = Field(default='neutral', description="情感极性：敌对/亲密/中立")
     time: Optional[TimeInfo] = Field(None, description="互动发生的时间")
 
 # ==========================================
@@ -114,7 +116,7 @@ class NarrativeArc(BaseModel):
 class DestinyPrediction(BaseModel):
     """单个人物命运预测结果"""
     character: str
-    overall_outlook: str = Field(..., description="总体走向 (positive, negative, neutral)")
+    overall_outlook: Literal['positive', 'negative', 'neutral'] = Field(..., description="总体走向 (positive, negative, neutral)")
     overall_confidence: float = Field(..., description="预测置信度")
     summary: str = Field(..., description="命运预测总结")
     predictions: List[Dict[str, Any]] = Field(default_factory=list, description="具体的预测细项")
@@ -122,6 +124,14 @@ class DestinyPrediction(BaseModel):
 # ==========================================
 # 5. 全局流水线结果 (Pipeline Result)
 # ==========================================
+
+class NetworkAnalysis(BaseModel):
+    degree_centrality: Dict[str, float]
+    betweenness_centrality: Dict[str, float]
+    communities: List[List[str]]
+    main_character: str
+    graph_data: Dict
+    temporal_graphs: Optional[List[Dict]] = Field(default=None, description="按时间/章节序列演化的图谱快照")
 
 class NarrativeAnalysisResult(BaseModel):
     """端到端流水线输出总模型"""
@@ -133,7 +143,7 @@ class NarrativeAnalysisResult(BaseModel):
     events: List[Event]
     relations: List[Relation]
     
-    network_analysis: NetworkStats
+    network_analysis: NetworkAnalysis
     profiles: List[CharacterProfile]
     
     causal_chains: List[CausalChain]

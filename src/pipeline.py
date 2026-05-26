@@ -130,16 +130,79 @@ class NarrativePipeline:
         if verbose:
             print(f"  识别到 {len(characters)} 个独立人物（原始 {len(raw_characters)} 个实体）")
 
+        # ---- Phase 1.5: 存储到 RAG 向量数据库 ----
+        if verbose:
+            print("[Phase 1.5/5] 构建 RAG 向量知识库...")
+        try:
+            from src.rag.knowledge_base import RAGKnowledgeBase
+            rag_db = RAGKnowledgeBase()
+            rag_db.add_texts(converted_texts, book)
+            if verbose:
+                print("  RAG 向量知识库构建完成！")
+        except Exception as e:
+            if verbose:
+                print(f"  RAG 向量库构建失败: {e}")
+
         # ---- Phase 2: 关系网络 ----
         if verbose:
             print("[Phase 2/5] 关系抽取与网络构建...")
 
-        relations = self.relation_extractor.extract_relations_with_sentiment(
-            all_text, characters
-        )
+        relations = []
+        for i, chunk in enumerate(converted_texts):
+            rels = self.relation_extractor.extract_relations_with_sentiment(
+                chunk, characters
+            )
+            # 注入所属的块索引，用于后续时间轴演化分析
+            for r in rels:
+                r.chunk_index = i
+            relations.extend(rels)
+            if verbose:
+                print(f"  块 {i+1}/{len(converted_texts)} 提取完毕, 新增关系数: {len(rels)}")
 
         G = self.network_builder.build_network(relations)
         network_analysis = self.network_builder.analyze_network()
+        
+        # 增加时间轴图谱切片计算 (Temporal Graph)
+        temporal_graphs = []
+        try:
+            from collections import defaultdict
+            import networkx as nx
+            
+            # 按 chunk_index 对关系进行分组
+            chunk_relations = defaultdict(list)
+            for r in relations:
+                if hasattr(r, 'chunk_index') and r.chunk_index >= 0:
+                    chunk_relations[r.chunk_index].append(r)
+            
+            # 如果存在时间轴信息，生成增量图谱
+            if chunk_relations:
+                sorted_indices = sorted(chunk_relations.keys())
+                # 我们最多划分 10 个时间阶段以防止前端渲染过载
+                num_stages = min(10, len(sorted_indices))
+                chunk_size = max(1, len(sorted_indices) // num_stages)
+                
+                accumulated_rels = []
+                for stage in range(num_stages):
+                    stage_indices = sorted_indices[stage*chunk_size : (stage+1)*chunk_size]
+                    if not stage_indices:
+                        continue
+                        
+                    for idx in stage_indices:
+                        accumulated_rels.extend(chunk_relations[idx])
+                        
+                    # 构建到当前阶段的增量图谱
+                    stage_G = self.network_builder.build_network(accumulated_rels)
+                    stage_data = nx.node_link_data(stage_G)
+                    temporal_graphs.append({
+                        "stage": stage + 1,
+                        "progress_percent": round(((stage + 1) / num_stages) * 100),
+                        "graph_data": stage_data
+                    })
+                
+                network_analysis.temporal_graphs = temporal_graphs
+        except Exception as e:
+            if verbose:
+                print(f"  生成时间轴图谱演化失败: {e}")
 
         if verbose:
             print(f"  提取 {len(relations)} 条关系，网络密度 {network_analysis.density:.3f}")

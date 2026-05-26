@@ -151,6 +151,57 @@ async def get_task_results(task_id: str):
         
     return tasks_db[task_id]["results"]
 
+class ChatRequest(BaseModel):
+    query: str
+    book: str
+
+@app.post("/api/v1/rag/chat")
+async def rag_chat(req: ChatRequest):
+    try:
+        from src.rag.knowledge_base import RAGKnowledgeBase
+        from openai import AsyncOpenAI
+        import os
+        
+        # 1. 从向量库检索
+        rag_db = RAGKnowledgeBase()
+        snippets = rag_db.search(query=req.query, book_name=req.book, top_k=5)
+        
+        if not snippets:
+            return {"answer": "在原著中未检索到相关内容。", "sources": []}
+            
+        # 2. 组装上下文
+        context = "\n\n---\n\n".join([f"片段 {i+1}:\n{s['text']}" for i, s in enumerate(snippets)])
+        
+        # 3. 大模型回答
+        client = AsyncOpenAI(
+            api_key=os.getenv("DEEPSEEK_API_KEY"),
+            base_url="https://api.deepseek.com/v1"
+        )
+        
+        prompt = f"""你是一个数字人文研究助手。请基于以下从小说《{req.book}》中检索到的原文片段，回答用户的问题。
+要求：
+1. 必须严格基于提供的片段回答，不要编造。
+2. 尽可能引用原文细节。
+3. 如果片段中没有答案，请明确告知。
+
+【原文片段】：
+{context}
+
+【用户问题】：{req.query}
+"""
+        response = await client.chat.completions.create(
+            model="deepseek-chat",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.3
+        )
+        
+        return {
+            "answer": response.choices[0].message.content,
+            "sources": snippets
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

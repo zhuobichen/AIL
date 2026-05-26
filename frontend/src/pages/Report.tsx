@@ -1,20 +1,36 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getTaskResults } from '@/api/client';
+import { getTaskResults, API_BASE_URL } from '@/api/client';
 import ReactECharts from 'echarts-for-react';
-import { Loader2, ArrowLeft, Users, Zap, Award } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { Loader2, ArrowLeft, Users, Zap, Award, MessageSquare, Play, Pause, ChevronRight } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export default function Report() {
   const { taskId } = useParams<{ taskId: string }>();
   const navigate = useNavigate();
   const [results, setResults] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  
+  // 时间轴控制状态
+  const [currentStage, setCurrentStage] = useState(-1);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // RAG 聊天状态
+  const [chatQuery, setChatQuery] = useState('');
+  const [chatHistory, setChatHistory] = useState<{role: string, content: string, sources?: any[]}[]>([]);
+  const [isChatting, setIsChatting] = useState(false);
+  
+  // 选中的关系片段
+  const [selectedRelation, setSelectedRelation] = useState<any>(null);
 
   useEffect(() => {
     if (!taskId) return;
     getTaskResults(taskId).then(data => {
       setResults(data);
+      if (data?.network_analysis?.temporal_graphs?.length > 0) {
+        setCurrentStage(data.network_analysis.temporal_graphs.length - 1);
+      }
       setLoading(false);
     }).catch(err => {
       console.error(err);
@@ -39,10 +55,82 @@ export default function Report() {
   }
 
   const { network_analysis, destiny_predictions } = results;
-  const graphData = network_analysis.graph_data;
+  const temporal_graphs = network_analysis.temporal_graphs || [];
+  
+  // 决定当前使用哪个图谱数据
+  let currentGraphData = network_analysis.graph_data;
+  if (temporal_graphs.length > 0 && currentStage >= 0 && currentStage < temporal_graphs.length) {
+    currentGraphData = temporal_graphs[currentStage].graph_data;
+  }
+  
+  const handlePlay = () => {
+    if (isPlaying) {
+      if (timerRef.current) clearInterval(timerRef.current);
+      setIsPlaying(false);
+    } else {
+      setIsPlaying(true);
+      if (currentStage >= temporal_graphs.length - 1) {
+        setCurrentStage(0);
+      }
+      timerRef.current = setInterval(() => {
+        setCurrentStage(prev => {
+          if (prev >= temporal_graphs.length - 1) {
+            if (timerRef.current) clearInterval(timerRef.current);
+            setIsPlaying(false);
+            return prev;
+          }
+          return prev + 1;
+        });
+      }, 1500);
+    }
+  };
+
+  const handleChat = async () => {
+    if (!chatQuery.trim() || isChatting) return;
+    
+    const query = chatQuery;
+    setChatQuery('');
+    setChatHistory(prev => [...prev, { role: 'user', content: query }]);
+    setIsChatting(true);
+    
+    try {
+      // 从 URL 获取书籍名称，默认假设是第一本书
+      const book = "longzu"; 
+      
+      const res = await fetch(`${API_BASE_URL}/rag/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query, book })
+      });
+      
+      const data = await res.json();
+      setChatHistory(prev => [...prev, { 
+        role: 'assistant', 
+        content: data.answer,
+        sources: data.sources 
+      }]);
+    } catch (e) {
+      setChatHistory(prev => [...prev, { role: 'assistant', content: '抱歉，系统回答时出错。' }]);
+    } finally {
+      setIsChatting(false);
+    }
+  };
+
+  const onEvents = {
+    'click': (params: any) => {
+      if (params.dataType === 'edge') {
+        setSelectedRelation({
+          source: params.data.source,
+          target: params.data.target,
+          snippet: params.data.context_snippet || "暂无原文片段",
+          sentiment: params.data.sentiment || "neutral"
+        });
+      }
+    }
+  };
 
   // 转换 NetworkX JSON 为 ECharts 格式
-  const nodes = graphData.nodes.map((node: any) => ({
+  const nodes = currentGraphData.nodes.map((node: any) => ({
     id: node.id,
     name: node.id,
     symbolSize: Math.max(20, (network_analysis.degree_centrality[node.id] || 0) * 100),
@@ -55,18 +143,41 @@ export default function Report() {
     }
   }));
 
-  const links = graphData.links.map((link: any) => ({
-    source: link.source,
-    target: link.target,
-    value: link.weight || 1,
-    lineStyle: { width: Math.sqrt(link.weight || 1) }
-  }));
+  const links = currentGraphData.links.map((link: any) => {
+    // 根据 sentiment 决定红绿颜色
+    let color = 'source';
+    if (link.sentiment === 'positive') color = '#10b981'; // 绿
+    else if (link.sentiment === 'negative') color = '#ef4444'; // 红
+    
+    return {
+      source: link.source,
+      target: link.target,
+      value: link.weight || 1,
+      context_snippet: link.context_snippet,
+      sentiment: link.sentiment,
+      lineStyle: { 
+        width: Math.sqrt(link.weight || 1) * 2,
+        color: color,
+        opacity: link.sentiment === 'neutral' ? 0.3 : 0.8
+      }
+    };
+  });
 
   const categories = network_analysis.communities.map((_: any, i: number) => ({ name: `社区 ${i+1}` }));
 
   const option = {
     backgroundColor: 'transparent',
-    tooltip: { trigger: 'item' },
+    tooltip: { 
+      trigger: 'item',
+      formatter: (params: any) => {
+        if (params.dataType === 'edge') {
+          const s = params.data.sentiment;
+          const emoji = s === 'positive' ? '💚' : s === 'negative' ? '💔' : '⚪';
+          return `${params.data.source} > ${params.data.target}<br/>权重: ${params.data.value.toFixed(2)} ${emoji}<br/><span style="font-size:12px;color:#aaa">点击连线查看原著溯源</span>`;
+        }
+        return params.name;
+      }
+    },
     legend: { textStyle: { color: '#9ca3af' }, bottom: 0 },
     series: [
       {
@@ -88,9 +199,7 @@ export default function Report() {
           gravity: 0.1
         },
         lineStyle: {
-          color: 'source',
-          curveness: 0.3,
-          opacity: 0.7
+          curveness: 0.3
         },
         emphasis: {
           focus: 'adjacency',
@@ -129,6 +238,35 @@ export default function Report() {
             </h1>
             <p className="text-gray-400 mt-2 text-lg">基于 {graphData.nodes.length} 名角色和 {graphData.links.length} 段关系连接</p>
           </div>
+          
+          {/* 时间轴播放控制 */}
+          {temporal_graphs.length > 0 && (
+            <div className="flex items-center gap-4 bg-gray-900/50 p-3 rounded-2xl border border-gray-800">
+              <button 
+                onClick={handlePlay}
+                className="p-3 bg-cyan-600 hover:bg-cyan-500 rounded-xl text-white transition-colors"
+              >
+                {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
+              </button>
+              <div className="flex flex-col w-48">
+                <div className="flex justify-between text-xs text-gray-400 mb-1">
+                  <span>剧情演化</span>
+                  <span>{currentStage >= 0 ? temporal_graphs[currentStage].progress_percent : 100}%</span>
+                </div>
+                <input 
+                  type="range" 
+                  min={0} 
+                  max={temporal_graphs.length - 1} 
+                  value={currentStage >= 0 ? currentStage : temporal_graphs.length - 1}
+                  onChange={(e) => {
+                    if (isPlaying) handlePlay(); // 暂停播放
+                    setCurrentStage(parseInt(e.target.value));
+                  }}
+                  className="w-full accent-cyan-500"
+                />
+              </div>
+            </div>
+          )}
         </motion.div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -144,8 +282,33 @@ export default function Report() {
               <Users className="w-5 h-5 text-cyan-400" /> 社交网络拓扑图
             </h2>
             <div className="h-[600px] w-full">
-              <ReactECharts option={option} style={{ height: '100%', width: '100%' }} />
+              <ReactECharts option={option} style={{ height: '100%', width: '100%' }} onEvents={onEvents} />
             </div>
+            
+            {/* 选中关系原文溯源浮层 */}
+            <AnimatePresence>
+              {selectedRelation && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 20 }}
+                  className="absolute bottom-6 left-6 right-6 bg-gray-950/90 backdrop-blur-xl border border-gray-700 p-4 rounded-2xl shadow-2xl"
+                >
+                  <div className="flex justify-between items-center mb-2">
+                    <h3 className="font-bold text-cyan-400">
+                      {selectedRelation.source} ↔ {selectedRelation.target}
+                    </h3>
+                    <button 
+                      onClick={() => setSelectedRelation(null)}
+                      className="text-gray-400 hover:text-white"
+                    >
+                      关闭
+                    </button>
+                  </div>
+                  <p className="text-sm text-gray-300 italic">"{selectedRelation.snippet}"</p>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </motion.div>
 
           {/* Side Panels */}
@@ -211,6 +374,60 @@ export default function Report() {
                     </div>
                   );
                 })}
+              </div>
+            </motion.div>
+
+            {/* RAG Chat Panel */}
+            <motion.div 
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.5 }}
+              className="bg-gray-900/40 backdrop-blur-md border border-gray-800 rounded-3xl p-6 shadow-xl flex flex-col h-[400px]"
+            >
+              <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-gray-100">
+                <MessageSquare className="w-5 h-5 text-blue-400" /> 原著知识库问答
+              </h2>
+              
+              <div className="flex-1 overflow-y-auto space-y-4 mb-4 pr-2 scrollbar-thin scrollbar-thumb-gray-800 scrollbar-track-transparent">
+                {chatHistory.length === 0 ? (
+                  <div className="text-sm text-gray-500 text-center mt-10">
+                    尝试提问：“楚子航为什么要爆血？”
+                  </div>
+                ) : (
+                  chatHistory.map((msg, i) => (
+                    <div key={i} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                      <div className={`max-w-[85%] p-3 rounded-2xl text-sm ${msg.role === 'user' ? 'bg-cyan-600 text-white rounded-br-none' : 'bg-gray-800 text-gray-200 rounded-bl-none'}`}>
+                        {msg.content}
+                      </div>
+                    </div>
+                  ))
+                )}
+                {isChatting && (
+                  <div className="flex items-start">
+                    <div className="bg-gray-800 p-3 rounded-2xl rounded-bl-none text-sm text-gray-400 flex items-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin" /> 检索原著中...
+                    </div>
+                  </div>
+                )}
+              </div>
+              
+              <div className="relative mt-auto">
+                <input 
+                  type="text" 
+                  value={chatQuery}
+                  onChange={e => setChatQuery(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleChat()}
+                  placeholder="向原著提问..."
+                  disabled={isChatting}
+                  className="w-full bg-gray-950 border border-gray-700 rounded-xl py-3 pl-4 pr-12 text-sm focus:outline-none focus:border-cyan-500 text-white"
+                />
+                <button 
+                  onClick={handleChat}
+                  disabled={!chatQuery.trim() || isChatting}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-gray-400 hover:text-cyan-400 disabled:opacity-50"
+                >
+                  <ChevronRight className="w-5 h-5" />
+                </button>
               </div>
             </motion.div>
           </div>
