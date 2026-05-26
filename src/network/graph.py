@@ -1,9 +1,10 @@
 """人物社交网络构建与分析"""
 
-from typing import Any
+from typing import Any, List
 from collections import Counter
 import networkx as nx
 
+from ..models import Relation, NetworkStats
 
 class CharacterNetworkBuilder:
     """人物社交网络构建器
@@ -14,11 +15,11 @@ class CharacterNetworkBuilder:
     def __init__(self):
         self.G: nx.Graph | None = None
 
-    def build_network(self, relations: list[dict[str, Any]]) -> nx.Graph:
+    def build_network(self, relations: List[Relation]) -> nx.Graph:
         """从关系列表构建社交网络
 
         Args:
-            relations: RelationshipExtractor 输出的关系列表
+            relations: RelationshipExtractor 输出的 Relation 对象列表
 
         Returns:
             NetworkX 图对象
@@ -26,9 +27,9 @@ class CharacterNetworkBuilder:
         G = nx.Graph()
 
         for rel in relations:
-            source = rel["source"]
-            target = rel["target"]
-            rel_type = rel.get("type", "association")
+            source = rel.source
+            target = rel.target
+            rel_type = rel.type
 
             if G.has_edge(source, target):
                 # 累加权重
@@ -47,27 +48,18 @@ class CharacterNetworkBuilder:
         self.G = G
         return G
 
-    def analyze_network(self) -> dict[str, Any]:
+    def analyze_network(self) -> NetworkStats:
         """分析网络特征
 
         Returns:
-            包含各种网络指标的字典：
-            - characters: 人物列表
-            - num_relations: 关系数量
-            - degree_centrality: 度中心性
-            - betweenness_centrality: 介数中心性
-            - eigenvector_centrality: 特征向量中心性
-            - communities: 社区划分
-            - main_character: 主角（度中心性最高）
-            - bridge_character: 桥梁人物（介数中心性最高）
+            NetworkStats 对象，包含网络指标
         """
         if self.G is None or self.G.number_of_nodes() == 0:
-            return {
-                "characters": [],
-                "num_relations": 0,
-                "main_character": None,
-                "bridge_character": None,
-            }
+            return NetworkStats(
+                num_characters=0,
+                num_relations=0,
+                density=0.0
+            )
 
         G = self.G
 
@@ -76,12 +68,6 @@ class CharacterNetworkBuilder:
 
         # 介数中心性（谁是信息桥梁）
         betweenness_cent = nx.betweenness_centrality(G)
-
-        # 特征向量中心性（谁认识重要的人）
-        try:
-            eigenvector_cent = nx.eigenvector_centrality(G, max_iter=1000)
-        except nx.PowerIterationFailedConvergence:
-            eigenvector_cent = {node: 0.0 for node in G.nodes()}
 
         # 社区检测
         try:
@@ -94,21 +80,16 @@ class CharacterNetworkBuilder:
         main_char = max(degree_cent, key=degree_cent.get) if degree_cent else None
         bridge_char = max(betweenness_cent, key=betweenness_cent.get) if betweenness_cent else None
 
-        return {
-            "characters": list(G.nodes()),
-            "num_characters": G.number_of_nodes(),
-            "num_relations": G.number_of_edges(),
-            "density": nx.density(G),
-            "degree_centrality": degree_cent,
-            "betweenness_centrality": betweenness_cent,
-            "eigenvector_centrality": eigenvector_cent,
-            "communities": communities,
-            "main_character": main_char,
-            "bridge_character": bridge_char,
-            "isolated_characters": [
-                n for n in G.nodes() if G.degree(n) == 0
-            ],
-        }
+        return NetworkStats(
+            num_characters=G.number_of_nodes(),
+            num_relations=G.number_of_edges(),
+            density=nx.density(G),
+            main_character=main_char,
+            bridge_character=bridge_char,
+            communities=communities,
+            degree_centrality=degree_cent,
+            betweenness_centrality=betweenness_cent
+        )
 
     def get_ego_network(self, character: str, radius: int = 1) -> nx.Graph:
         """获取某人物的自我网络（邻域子图）

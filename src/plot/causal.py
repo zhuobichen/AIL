@@ -3,8 +3,9 @@
 分析事件之间的因果关系，构建叙事弧线。
 """
 
-from typing import Any
+from typing import Any, List, Dict
 
+from ..models import Event, CausalChain, NarrativeArc
 
 class CausalChainAnalyzer:
     """因果链分析器
@@ -23,17 +24,17 @@ class CausalChainAnalyzer:
         }
 
     def analyze_causal_chains(
-        self, events: list[dict[str, Any]]
-    ) -> list[dict[str, Any]]:
+        self, events: List[Event]
+    ) -> List[CausalChain]:
         """分析事件之间的因果关系
 
         Args:
-            events: TimelineExtractor 输出的按时间排序的事件列表
+            events: TimelineExtractor 输出的按时间排序的 Event 列表
 
         Returns:
-            因果链列表，每项包含 event, causes, effects
+            CausalChain 对象列表
         """
-        causal_chains: list[dict[str, Any]] = []
+        causal_chains: List[CausalChain] = []
 
         for i, event in enumerate(events):
             # 查找原因（前面的事件）
@@ -45,22 +46,22 @@ class CausalChainAnalyzer:
             # 检测转折点
             is_turning_point = self._is_turning_point(event, events, i)
 
-            causal_chains.append({
-                "event": event,
-                "index": i,
-                "causes": causes,
-                "effects": effects,
-                "is_turning_point": is_turning_point,
-            })
+            causal_chains.append(CausalChain(
+                event=event,
+                index=i,
+                causes=causes,
+                effects=effects,
+                is_turning_point=is_turning_point
+            ))
 
         return causal_chains
 
     def _find_causes(
-        self, event: dict[str, Any], previous_events: list[dict[str, Any]]
-    ) -> list[dict[str, Any]]:
+        self, event: Event, previous_events: List[Event]
+    ) -> List[Event]:
         """查找事件的原因"""
-        causes: list[dict[str, Any]] = []
-        text = event.get("raw_text", "")
+        causes: List[Event] = []
+        text = event.raw_text
 
         # 1. 检测明确因果连接词
         for marker in self.causal_markers["cause"]:
@@ -68,7 +69,7 @@ class CausalChainAnalyzer:
                 cause_part = text.split(marker)[-1].split("，")[0]
                 keywords = cause_part[:20]
                 for prev in reversed(previous_events):
-                    prev_text = prev.get("raw_text", "")
+                    prev_text = prev.raw_text
                     if keywords and keywords in prev_text:
                         causes.append(prev)
                         break
@@ -76,9 +77,9 @@ class CausalChainAnalyzer:
         # 2. 基于人物和时间邻近性推断
         if not causes:
             # 检查最近 3 个事件
-            event_chars = set(event.get("characters", []))
+            event_chars = set(event.characters)
             for prev in reversed(previous_events[-3:]):
-                prev_chars = set(prev.get("characters", []))
+                prev_chars = set(prev.characters)
                 if event_chars and prev_chars:
                     if event_chars & prev_chars:
                         causes.append(prev)
@@ -87,27 +88,27 @@ class CausalChainAnalyzer:
         return causes
 
     def _find_effects(
-        self, event: dict[str, Any], later_events: list[dict[str, Any]]
-    ) -> list[dict[str, Any]]:
+        self, event: Event, later_events: List[Event]
+    ) -> List[Event]:
         """查找事件的结果"""
-        effects: list[dict[str, Any]] = []
-        text = event.get("raw_text", "")
+        effects: List[Event] = []
+        text = event.raw_text
 
         # 1. 检测"效果"连接词出现在后续事件中
         for marker in self.causal_markers["effect"]:
             if marker in text:
                 keywords = text.split(marker)[-1][:20]
                 for later in later_events[:3]:
-                    later_text = later.get("raw_text", "")
+                    later_text = later.raw_text
                     if keywords and keywords in later_text:
                         effects.append(later)
                         break
 
         # 2. 基于人物和时间邻近性推断
         if not effects:
-            event_chars = set(event.get("characters", []))
+            event_chars = set(event.characters)
             for later in later_events[:3]:
-                later_chars = set(later.get("characters", []))
+                later_chars = set(later.characters)
                 if event_chars and later_chars:
                     if event_chars & later_chars:
                         effects.append(later)
@@ -116,10 +117,10 @@ class CausalChainAnalyzer:
         return effects
 
     def _is_turning_point(
-        self, event: dict[str, Any], all_events: list[dict[str, Any]], index: int
+        self, event: Event, all_events: List[Event], index: int
     ) -> bool:
         """判断事件是否为转折点"""
-        text = event.get("raw_text", "")
+        text = event.raw_text
 
         # 包含转折连接词
         for marker in self.causal_markers["contrast"]:
@@ -128,8 +129,8 @@ class CausalChainAnalyzer:
 
         # 人物集合突变（新增或减少 > 50% 的人物）
         if index > 0:
-            prev_chars = set(all_events[index - 1].get("characters", []))
-            curr_chars = set(event.get("characters", []))
+            prev_chars = set(all_events[index - 1].characters)
+            curr_chars = set(event.characters)
             if prev_chars and curr_chars:
                 overlap = len(prev_chars & curr_chars)
                 total = len(prev_chars | curr_chars)
@@ -139,8 +140,8 @@ class CausalChainAnalyzer:
         return False
 
     def build_narrative_arc(
-        self, events: list[dict[str, Any]]
-    ) -> dict[str, list[dict[str, Any]]]:
+        self, events: List[Event]
+    ) -> NarrativeArc:
         """构建叙事弧线：将事件分为 5 个阶段
 
         - exposition (开端): 0-20%
@@ -153,18 +154,12 @@ class CausalChainAnalyzer:
             events: 按时间排序的事件列表
 
         Returns:
-            包含各阶段事件列表的字典
+            NarrativeArc 对象
         """
         n = len(events)
 
         if n == 0:
-            return {
-                "exposition": [],
-                "rising_action": [],
-                "climax": [],
-                "falling_action": [],
-                "resolution": [],
-            }
+            return NarrativeArc()
 
         weights = [0.2, 0.3, 0.2, 0.2, 0.1]
         boundaries = []
@@ -173,15 +168,15 @@ class CausalChainAnalyzer:
             cumulative += w
             boundaries.append(int(n * cumulative))
 
-        return {
-            "exposition": events[: boundaries[0]],
-            "rising_action": events[boundaries[0] : boundaries[1]],
-            "climax": events[boundaries[1] : boundaries[2]],
-            "falling_action": events[boundaries[2] : boundaries[3]],
-            "resolution": events[boundaries[3] :],
-        }
+        return NarrativeArc(
+            exposition=events[: boundaries[0]],
+            rising_action=events[boundaries[0] : boundaries[1]],
+            climax=events[boundaries[1] : boundaries[2]],
+            falling_action=events[boundaries[2] : boundaries[3]],
+            resolution=events[boundaries[3] :]
+        )
 
-    def describe_arc(self, arc: dict[str, list[dict[str, Any]]]) -> dict[str, str]:
+    def describe_arc(self, arc: NarrativeArc) -> Dict[str, str]:
         """生成叙事弧线的可读描述
 
         Args:
@@ -198,8 +193,9 @@ class CausalChainAnalyzer:
             "resolution": "结局（问题解决）",
         }
 
+        arc_dict = arc.model_dump()
         descriptions = {}
-        for stage, events in arc.items():
+        for stage, events in arc_dict.items():
             name = stage_names.get(stage, stage)
             if not events:
                 descriptions[stage] = f"{name}: 暂无事件"

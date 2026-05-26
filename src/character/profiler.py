@@ -3,11 +3,152 @@
 基于语言使用模式分析人物的性格特质、情感倾向和沟通风格。
 """
 
-from typing import Any
+import json
+from typing import Any, List, Optional, Dict
 from collections import Counter
 
+from ..interfaces import BaseCharacterProfiler
+from ..models import CharacterProfile, Traits, EmotionProfile, CommunicationStyle, Relation
 
-class CharacterProfiler:
+class LLMCharacterProfiler(BaseCharacterProfiler):
+    """基于大模型的人物性格刻画器"""
+    
+    def __init__(self, api_key: str, base_url: str = "https://api.deepseek.com"):
+        from openai import OpenAI
+        self.client = OpenAI(api_key=api_key, base_url=base_url)
+        self.role_thresholds = {
+            "protagonist": 0.3,
+            "supporting": 0.2,
+            "minor": 0.1,
+            "background": 0.0,
+        }
+
+    def profile_all(
+        self, characters: list[str], texts: list[str]
+    ) -> List[CharacterProfile]:
+        """批量刻画所有人物"""
+        profiles = []
+        # 只刻画出现频率最高的前 10 个人物，节省 API 调用时间
+        char_counts = {c: sum(1 for t in texts if c in t) for c in characters}
+        top_chars = sorted(char_counts.keys(), key=lambda x: char_counts[x], reverse=True)[:10]
+        
+        for name in characters:
+            if name in top_chars and char_counts[name] > 0:
+                profiles.append(self.profile_character(name, texts, characters))
+            else:
+                # 简单回退给不重要的人物
+                role = self._infer_role(name, [t for t in texts if name in t], texts, characters)
+                profiles.append(CharacterProfile(
+                    name=name,
+                    role_in_story=role,
+                    total_mentions=char_counts[name],
+                    presence_ratio=char_counts[name] / max(len(texts), 1),
+                    traits=Traits(),
+                    emotions=EmotionProfile(),
+                    communication_style=CommunicationStyle(),
+                    personality_summary="出现次数较少，暂无足够信息。"
+                ))
+        return profiles
+
+    def profile_character(
+        self, name: str, texts: list[str], all_characters: Optional[list[str]] = None
+    ) -> CharacterProfile:
+        character_texts = [t for t in texts if name in t]
+        presence_ratio = len(character_texts) / max(len(texts), 1)
+        role = self._infer_role(name, character_texts, texts, all_characters or [])
+        
+        # 将文本拼接，限制长度
+        context = "\n".join(character_texts)[:3000]
+        
+        prompt = f"""
+你是一个古典文学数字人文分析专家。请根据以下关于人物【{name}】的文本片段，分析其性格特质和情感倾向。
+
+请输出 JSON 格式，包含以下结构:
+{{
+  "traits": {{
+    "leadership": 0.0到1.0的浮点数,
+    "creativity": 0.0到1.0的浮点数,
+    "agreeableness": 0.0到1.0的浮点数,
+    "conscientiousness": 0.0到1.0的浮点数,
+    "extraversion": 0.0到1.0的浮点数,
+    "emotional_stability": 0.0到1.0的浮点数,
+    "assertiveness": 0.0到1.0的浮点数,
+    "cooperativeness": 0.0到1.0的浮点数
+  }},
+  "emotions": {{
+    "dominant": "主导情感(例如: 愤怒, 喜悦, 悲伤, 中立等)",
+    "valence": "情感效价(positive, negative, 或 neutral)"
+  }},
+  "personality_summary": "一段简短的人物性格与行为总结（50字以内）"
+}}
+
+文本片段:
+{context}
+"""
+        try:
+            response = self.client.chat.completions.create(
+                model="deepseek-chat",
+                messages=[{"role": "user", "content": prompt}],
+                response_format={"type": "json_object"},
+                temperature=0.3
+            )
+            data = json.loads(response.choices[0].message.content)
+            
+            traits_data = data.get("traits", {})
+            emotions_data = data.get("emotions", {})
+            
+            profile = CharacterProfile(
+                name=name,
+                role_in_story=role,
+                total_mentions=len(character_texts),
+                presence_ratio=presence_ratio,
+                traits=Traits(**{k: float(v) for k, v in traits_data.items() if hasattr(Traits, k)}),
+                emotions=EmotionProfile(
+                    dominant=emotions_data.get("dominant", "neutral"),
+                    valence=emotions_data.get("valence", "neutral"),
+                    distribution={}
+                ),
+                communication_style=CommunicationStyle(),
+                personality_summary=data.get("personality_summary", "大模型分析完成。")
+            )
+            return profile
+            
+        except Exception as e:
+            print(f"  [LLM Profiler Error for {name}] {e}")
+            return CharacterProfile(
+                name=name,
+                role_in_story=role,
+                total_mentions=len(character_texts),
+                presence_ratio=presence_ratio,
+                traits=Traits(),
+                emotions=EmotionProfile(),
+                communication_style=CommunicationStyle(),
+                personality_summary="大模型分析失败，暂无信息。"
+            )
+
+    def _infer_role(
+        self,
+        name: str,
+        character_texts: list[str],
+        all_texts: list[str],
+        all_characters: list[str],
+    ) -> str:
+        total_texts = max(len(all_texts), 1)
+        presence = len(character_texts) / total_texts
+        if presence > self.role_thresholds["protagonist"]:
+            return "protagonist"
+        elif presence > self.role_thresholds["supporting"]:
+            return "supporting"
+        elif presence > self.role_thresholds["minor"]:
+            return "minor"
+        else:
+            return "background"
+
+    async def profile_all_async(self, characters: list[str], text: str, relations: list[Relation]) -> Dict[str, CharacterProfile]:
+        return {p.name: p for p in self.profile_all(characters, [text])}
+
+
+class CharacterProfiler(BaseCharacterProfiler):
     """人物性格刻画器
 
     通过分析人物相关的文本，刻画其性格特质、情感特征、沟通风格和在故事中的角色。
@@ -45,8 +186,8 @@ class CharacterProfiler:
         }
 
     def profile_character(
-        self, name: str, texts: list[str], all_characters: list[str] | None = None
-    ) -> dict[str, Any]:
+        self, name: str, texts: list[str], all_characters: Optional[list[str]] = None
+    ) -> CharacterProfile:
         """刻画单个人物
 
         Args:
@@ -55,33 +196,35 @@ class CharacterProfiler:
             all_characters: 所有人物列表（用于角色推断）
 
         Returns:
-            人物画像字典
+            CharacterProfile 对象
         """
         # 收集该人物相关的文本
         character_texts = [t for t in texts if name in t]
+        
+        traits_dict = self._analyze_traits(character_texts)
+        emotions_dict = self._analyze_emotions(character_texts)
+        comm_style_dict = self._analyze_communication_style(character_texts)
+        
+        role = self._infer_role(name, character_texts, texts, all_characters or [])
 
-        profile: dict[str, Any] = {
-            "name": name,
-            "total_mentions": len(character_texts),
-            "presence_ratio": len(character_texts) / max(len(texts), 1),
-            "traits": self._analyze_traits(character_texts),
-            "emotions": self._analyze_emotions(character_texts),
-            "communication_style": self._analyze_communication_style(character_texts),
-        }
-
-        # 角色推断
-        profile["role_in_story"] = self._infer_role(
-            name, character_texts, texts, all_characters or []
+        profile = CharacterProfile(
+            name=name,
+            role_in_story=role,
+            total_mentions=len(character_texts),
+            presence_ratio=len(character_texts) / max(len(texts), 1),
+            traits=Traits(**traits_dict),
+            emotions=EmotionProfile(**emotions_dict),
+            communication_style=CommunicationStyle(**comm_style_dict)
         )
 
-        # 性格总结
-        profile["personality_summary"] = self._summarize_personality(profile)
+        # 性格总结依赖于 profile 对象本身
+        profile.personality_summary = self._summarize_personality(profile)
 
         return profile
 
     def profile_all(
-        self, characters: list[str], texts: list[str]
-    ) -> list[dict[str, Any]]:
+        self, characters: list[str], text: str, relations: list[Relation]
+    ) -> Dict[str, CharacterProfile]:
         """批量刻画所有人物
 
         Args:
@@ -89,9 +232,13 @@ class CharacterProfiler:
             texts: 所有文本
 
         Returns:
-            人物画像列表
+            CharacterProfile 对象列表
         """
-        return [self.profile_character(c, texts, characters) for c in characters]
+        return {c: self.profile_character(c, [text], characters) for c in characters}
+        
+    async def profile_all_async(self, characters: list[str], text: str, relations: list[Relation]) -> Dict[str, CharacterProfile]:
+        # 为兼容接口定义，暂时转交老方法
+        pass
 
     def _analyze_traits(self, texts: list[str]) -> dict[str, float]:
         """分析性格特质"""
@@ -163,7 +310,7 @@ class CharacterProfiler:
         """分析沟通风格"""
         if not texts:
             return {
-                "verbosity": 0,
+                "verbosity": 0.0,
                 "frequency": 0,
                 "initiation": 0,
                 "responsiveness": 0,
@@ -214,13 +361,14 @@ class CharacterProfiler:
         else:
             return "background"
 
-    def _summarize_personality(self, profile: dict[str, Any]) -> str:
+    def _summarize_personality(self, profile: CharacterProfile) -> str:
         """生成性格总结"""
-        traits = profile.get("traits", {})
-        emotions = profile.get("emotions", {})
-        role = profile.get("role_in_story", "unknown")
+        traits = profile.traits.model_dump()
+        emotions = profile.emotions.model_dump()
+        role = profile.role_in_story
 
-        if not traits:
+        # 检查是否有非零的特质
+        if not any(traits.values()):
             return "暂无足够信息"
 
         # 找出最突出的 3 个特质

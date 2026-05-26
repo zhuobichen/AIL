@@ -3,8 +3,9 @@
 基于叙事模式匹配和性格特质分析，预测人物命运走向。
 """
 
-from typing import Any
+from typing import Any, Dict, Optional
 
+from ..models import CharacterProfile, NarrativeArc, DestinyPrediction
 
 class DestinyPredictor:
     """命运预测器
@@ -118,9 +119,9 @@ class DestinyPredictor:
 
     def predict_destiny(
         self,
-        character_profile: dict[str, Any],
-        narrative_arc: dict[str, list[dict[str, Any]]] | None = None,
-    ) -> dict[str, Any]:
+        character_profile: CharacterProfile,
+        narrative_arc: Optional[NarrativeArc] = None,
+    ) -> DestinyPrediction:
         """预测人物命运
 
         Args:
@@ -128,7 +129,7 @@ class DestinyPredictor:
             narrative_arc: CausalChainAnalyzer 输出的叙事弧线（可选）
 
         Returns:
-            命运预测结果
+            DestinyPrediction 对象
         """
         predictions: list[dict[str, Any]] = []
 
@@ -152,16 +153,16 @@ class DestinyPredictor:
         # 3. 综合评估
         overall = self._overall_assessment(predictions)
 
-        return {
-            "character": character_profile.get("name", "未知"),
-            "predictions": predictions,
-            "overall_outlook": overall["outlook"],
-            "overall_confidence": overall["confidence"],
-            "summary": overall["summary"],
-        }
+        return DestinyPrediction(
+            character=character_profile.name,
+            overall_outlook=overall["outlook"],
+            overall_confidence=overall["confidence"],
+            summary=overall["summary"],
+            predictions=predictions
+        )
 
     def _match_narrative_pattern(
-        self, narrative_arc: dict[str, list[dict[str, Any]]]
+        self, narrative_arc: NarrativeArc
     ) -> str | None:
         """匹配叙事模式"""
         best_match = None
@@ -177,12 +178,13 @@ class DestinyPredictor:
 
     def _calculate_pattern_fit(
         self,
-        arc: dict[str, list[dict[str, Any]]],
+        arc: NarrativeArc,
         pattern_stages: list[str],
     ) -> float:
         """计算叙事弧线与模式的匹配度"""
+        arc_dict = arc.model_dump()
         # 基于事件数量分布与模式阶段数的相似度
-        arc_lengths = [len(arc.get(s, [])) for s in arc]
+        arc_lengths = [len(arc_dict.get(s, [])) for s in arc_dict]
         total = sum(arc_lengths)
         if total == 0:
             return 0.0
@@ -192,10 +194,10 @@ class DestinyPredictor:
         return min(filled_stages / 4, 1.0) * 0.5 + 0.2
 
     def _predict_based_on_traits(
-        self, profile: dict[str, Any]
+        self, profile: CharacterProfile
     ) -> list[dict[str, Any]]:
         """基于性格特质预测"""
-        traits = profile.get("traits", {})
+        traits = profile.traits.model_dump()
         predictions = []
 
         for rule in self.trait_destiny_rules:

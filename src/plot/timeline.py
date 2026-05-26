@@ -5,8 +5,9 @@
 
 import re
 from datetime import datetime, timedelta
-from typing import Any, Optional
+from typing import Any, Optional, List
 
+from ..models import Event, TimeInfo
 
 class TimelineExtractor:
     """时间线抽取器
@@ -60,7 +61,7 @@ class TimelineExtractor:
         self,
         texts: list[str],
         characters: Optional[list[str]] = None,
-    ) -> list[dict[str, Any]]:
+    ) -> List[Event]:
         """从文本列表中提取事件
 
         Args:
@@ -68,9 +69,9 @@ class TimelineExtractor:
             characters: 已知人物列表（可选，不传则用简单方法提取）
 
         Returns:
-            按时间排序的事件列表
+            按时间排序的 Event 列表
         """
-        events: list[dict[str, Any]] = []
+        events: List[Event] = []
 
         for text in texts:
             # 提取时间
@@ -84,24 +85,24 @@ class TimelineExtractor:
             # 提取事件关键词
             description = self._extract_event_description(text)
 
-            events.append({
-                "time": time_info,
-                "characters": participants,
-                "description": description,
-                "raw_text": text.strip(),
-            })
+            events.append(Event(
+                time=time_info,
+                characters=participants,
+                description=description,
+                raw_text=text.strip()
+            ))
 
         # 按时间排序：有时间的排前面，无时间的排后面
-        def sort_key(e):
-            t = e.get("time")
-            if t and t.get("timestamp"):
-                return (0, t["timestamp"])
+        def sort_key(e: Event):
+            t = e.time
+            if t and t.timestamp:
+                return (0, t.timestamp)
             return (1, datetime.max)
 
         events.sort(key=sort_key)
         return events
 
-    def _extract_time(self, text: str) -> Optional[dict[str, Any]]:
+    def _extract_time(self, text: str) -> Optional[TimeInfo]:
         """从单段文本中提取时间信息"""
         # 1. 尝试绝对时间
         for pattern in self.time_patterns["absolute"]:
@@ -121,11 +122,11 @@ class TimelineExtractor:
 
                     if year and month and day:
                         ts = datetime(year, month, day)
-                        return {
-                            "type": "absolute",
-                            "timestamp": ts,
-                            "text": match.group(),
-                        }
+                        return TimeInfo(
+                            type="absolute",
+                            timestamp=ts,
+                            text=match.group()
+                        )
                 except ValueError:
                     continue
 
@@ -133,12 +134,12 @@ class TimelineExtractor:
         for rel_word, offset in self.time_patterns["relative"].items():
             if rel_word in text:
                 target_time = self.base_time + timedelta(days=offset)
-                return {
-                    "type": "relative",
-                    "reference": rel_word,
-                    "timestamp": target_time,
-                    "text": rel_word,
-                }
+                return TimeInfo(
+                    type="relative",
+                    reference=rel_word,
+                    timestamp=target_time,
+                    text=rel_word
+                )
 
         return None
 
@@ -165,7 +166,7 @@ class TimelineExtractor:
         # 回退：返回前 80 个字符作为摘要
         return text[:80].replace("\n", " ") + ("..." if len(text) > 80 else "")
 
-    def get_timeline_summary(self, events: list[dict[str, Any]]) -> list[str]:
+    def get_timeline_summary(self, events: List[Event]) -> list[str]:
         """生成可读的时间线摘要
 
         Args:
@@ -176,15 +177,15 @@ class TimelineExtractor:
         """
         lines = []
         for i, event in enumerate(events, 1):
-            time_info = event.get("time", {})
-            if time_info and time_info.get("timestamp"):
-                ts = time_info["timestamp"]
+            time_info = event.time
+            if time_info and time_info.timestamp:
+                ts = time_info.timestamp
                 time_str = ts.strftime("%Y年%m月%d日")
             else:
                 time_str = "未知时间"
 
-            chars = "、".join(event.get("characters", [])) or "未知人物"
-            desc = event.get("description", "")
+            chars = "、".join(event.characters) or "未知人物"
+            desc = event.description
 
             lines.append(f"[{i}] {time_str} | {chars} | {desc}")
 

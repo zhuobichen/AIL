@@ -8,3 +8,20 @@ venv/
 vis-network.*
 hongloumeng_full.txt
 hongloumeng_output.txt
+
+# LLM Cache & Outputs
+.llm_cache/
+outputs/
+*.txt
+*.json
+
+# IDE & Editor
+.vscode/
+.idea/
+.trae/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.eslintcache

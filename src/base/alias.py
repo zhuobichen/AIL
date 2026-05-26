@@ -83,6 +83,10 @@ class CharacterAliasResolver:
                 elif self._is_same_surname_context(text, entity, other):
                     aliases.append(other)
 
+                # 5. 名字匹配（如：林黛玉 -> 黛玉）
+                elif other == given_name:
+                    aliases.append(other)
+
             if aliases:
                 alias_groups.append({
                     "canonical_name": entity,

@@ -18,27 +18,34 @@ class NamedEntityRecognizer:
         backend: str = "spacy",
         model_name: Optional[str] = None,
         character_names: Optional[list[str]] = None,
+        strict_dict_mode: bool = False,
     ):
         """
         Args:
             backend: "spacy" 或 "transformers"
             model_name: 模型名称，默认使用中文模型
             character_names: 自定义人物名称白名单
+            strict_dict_mode: 如果为 True，只使用字典提取人物，跳过模型 NER
         """
         self.backend = backend
         self._nlp = None
         self.character_names = set(character_names or [])
+        self.strict_dict_mode = strict_dict_mode
+
+        if strict_dict_mode:
+            return  # Skip loading models
 
         if backend == "spacy":
             try:
                 import spacy
                 self._nlp = spacy.load(model_name or "zh_core_web_sm")
+                self._nlp.max_length = 2000000 # 增加 max_length 以支持长文本
             except OSError:
                 raise RuntimeError(
                     "未找到 spaCy 中文模型。请运行: python -m spacy download zh_core_web_sm"
                 )
         elif backend == "transformers":
-            self.model_name = model_name or "ckiplab/bert-base-chinese-ner"
+            self.model_name = model_name or "ckiplab/bert-base-chinese-ner"     
         else:
             raise ValueError(f"不支持的后端: {backend}")
 
@@ -50,7 +57,6 @@ class NamedEntityRecognizer:
         """从文本中提取人物实体
 
         先用人名词典扫描，再用 spaCy NER 补充，最后过滤误识别。
-
         Args:
             text: 输入文本
 
@@ -61,9 +67,12 @@ class NamedEntityRecognizer:
 
         # 1. 词典匹配（优先级最高）
         if self.character_names:
-            for name in sorted(self.character_names, key=len, reverse=True):
+            for name in sorted(self.character_names, key=len, reverse=True):    
                 if name in text:
                     results.add(name)
+
+        if self.strict_dict_mode:
+            return list(results)
 
         # 2. spaCy NER
         ner_results = self._extract_spacy(text) if self.backend == "spacy" else self._extract_transformers(text)

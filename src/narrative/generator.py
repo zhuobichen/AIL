@@ -3,8 +3,107 @@
 基于分析结果生成故事摘要和完整叙事文本。
 """
 
-from typing import Any
+import json
+from typing import Any, Dict
 
+class LLMNarrativeGenerator:
+    """基于大模型的叙事生成器"""
+    
+    def __init__(self, api_key: str, base_url: str = "https://api.deepseek.com"):
+        from openai import OpenAI
+        self.client = OpenAI(api_key=api_key, base_url=base_url)
+
+    def generate_summary(self, analysis_results: dict[str, Any]) -> dict[str, Any]:
+        """使用大模型生成高质量的故事摘要"""
+        # 提取关键信息给大模型
+        network = analysis_results.get("network_analysis", {})
+        profiles = analysis_results.get("profiles", [])
+        events = analysis_results.get("events", [])
+        
+        main_chars = [p.get("name") for p in profiles if p.get("role_in_story") in ["protagonist", "supporting"]][:5]
+        key_events = [e.get("description", e.get("raw_text", ""))[:100] for e in events[:10]]
+        
+        prompt = f"""
+你是一个数字人文叙事分析专家。请根据以下提取的文本信息，生成一个高度浓缩的故事摘要。
+
+核心人物: {main_chars}
+关键事件(节选): {key_events}
+
+请输出 JSON 格式，包含以下字段:
+{{
+  "title": "你为这个故事起的一个吸引人的标题",
+  "time_span": "故事的时间跨度(如果未知写'未知')",
+  "themes": ["主题1", "主题2", "主题3"],
+  "plot_summary": "100字以内的核心剧情总结"
+}}
+"""
+        try:
+            response = self.client.chat.completions.create(
+                model="deepseek-chat",
+                messages=[{"role": "user", "content": prompt}],
+                response_format={"type": "json_object"},
+                temperature=0.7
+            )
+            data = json.loads(response.choices[0].message.content)
+            
+            # 为了兼容现有接口，映射回旧的数据结构
+            return {
+                "title": data.get("title", "未命名故事"),
+                "setting": {
+                    "time_span": data.get("time_span", "未知"),
+                    "num_characters": len(profiles),
+                    "num_events": len(events),
+                    "setting_type": "文学叙事"
+                },
+                "characters": [{"name": p.get("name"), "role": p.get("role_in_story"), "personality": p.get("personality_summary")} for p in profiles],
+                "themes": data.get("themes", []),
+                "plot_summary": data.get("plot_summary", "")
+            }
+        except Exception as e:
+            print(f"  [LLM Generator Error] {e}")
+            return {"title": "大模型生成失败", "setting": {"time_span": "未知", "num_characters": 0, "num_events": 0}}
+
+    def generate_story(
+        self,
+        analysis_results: dict[str, Any],
+        style: str = "dramatic",
+    ) -> str:
+        """使用大模型生成完整叙事文本"""
+        network = analysis_results.get("network_analysis", {})
+        profiles = analysis_results.get("profiles", [])
+        events = analysis_results.get("events", [])
+        destiny = analysis_results.get("destiny_predictions", {})
+        
+        main_chars = [p.get("name") for p in profiles if p.get("role_in_story") in ["protagonist", "supporting"]][:8]
+        key_events = [e.get("raw_text", "")[:150] for e in events[:20]]
+        
+        destiny_str = "\n".join([f"{name}: {d.get('overall_outlook')} - {d.get('summary')}" for name, d in destiny.items()][:5])
+
+        prompt = f"""
+你是一位顶级的数字人文小说重构专家。请根据以下由 AI 提取的小说碎片信息，重新撰写一篇结构完整、引人入胜的叙事报告。
+
+风格要求: {style} (dramatic: 戏剧化、充满张力; academic: 严肃、结构化分析; concise: 极简摘要)
+
+【核心人物】
+{main_chars}
+
+【关键情节碎片】
+{key_events}
+
+【AI推演命运结局】
+{destiny_str}
+
+请使用 Markdown 格式输出。如果是 dramatic 风格，请像写小说梗概一样跌宕起伏，分章节或幕次(如：第一幕、第二幕)来写，最后给出结局点评。不要输出多余的解释。
+"""
+        try:
+            response = self.client.chat.completions.create(
+                model="deepseek-chat",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.8
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            return f"大模型生成故事失败: {e}"
 
 class NarrativeGenerator:
     """叙事生成器

@@ -1,4 +1,4 @@
 from .destiny import DestinyPredictor
-from .generator import NarrativeGenerator
+from .generator import NarrativeGenerator, LLMNarrativeGenerator
 
-__all__ = ["DestinyPredictor", "NarrativeGenerator"]
+__all__ = ["DestinyPredictor", "NarrativeGenerator", "LLMNarrativeGenerator"]

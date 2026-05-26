@@ -3,10 +3,153 @@
 从文本中识别并分类人物之间的关系。
 """
 
-from typing import Any
+import json
+import hashlib
+from typing import Any, List
+from pydantic import BaseModel
+from diskcache import Cache
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
+from ..models import Relation
+from ..interfaces import BaseRelationshipExtractor
 
-class RelationshipExtractor:
+class LLMRelationshipExtractor(BaseRelationshipExtractor):
+    """基于大模型的人物关系抽取器"""
+    
+    def __init__(self, api_key: str, base_url: str = "https://api.deepseek.com"):
+        from openai import OpenAI
+        self.client = OpenAI(api_key=api_key, base_url=base_url)
+        # 初始化本地磁盘缓存，用于断点续传
+        self.cache = Cache(".llm_cache/relations")
+        
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=2, min=4, max=30),
+        retry=retry_if_exception_type(Exception)
+    )
+    def _call_llm_with_retry(self, prompt: str) -> str:
+        """带重试机制和断点续传缓存的 LLM 调用"""
+        # 使用 Prompt 和模型参数的组合哈希作为缓存 Key，防止未来更换模型时读取了旧缓存
+        cache_key_content = f"deepseek-chat_temp0.1_{prompt}"
+        prompt_hash = hashlib.md5(cache_key_content.encode('utf-8')).hexdigest()
+        
+        if prompt_hash in self.cache:
+            return self.cache[prompt_hash]
+            
+        response = self.client.chat.completions.create(
+            model="deepseek-chat",
+            messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"},
+            temperature=0.1,
+            timeout=30 # 增加超时保护
+        )
+        content = response.choices[0].message.content
+        
+        # 预验证 JSON 格式，如果 LLM 返回了损坏的 JSON，则抛出异常触发重试，并且不存入缓存
+        try:
+            json.loads(content)
+        except json.JSONDecodeError:
+            raise ValueError(f"LLM 返回了无效的 JSON 格式: {content[:100]}...")
+            
+        self.cache[prompt_hash] = content # 存入缓存
+        return content
+
+    def extract_relations_with_sentiment(self, text: str, characters: list[str]) -> List[Relation]:
+        """使用大模型抽取关系，附带情感倾向"""
+        # 优化：采用滑动窗口分块，防止边界关系被截断
+        chunk_size = 4000
+        overlap = 400
+        relations = []
+        seen_pairs = set()
+        
+        # 构造滑动窗口
+        chunks = []
+        start = 0
+        while start < len(text):
+            end = min(start + chunk_size, len(text))
+            chunks.append((start, text[start:end]))
+            start += chunk_size - overlap
+            
+        from rich.progress import Progress
+        
+        print(f"  [LLM] 文本已被切分为 {len(chunks)} 块(带重叠)，开始深度抽取 (支持断点续传)...")
+        
+        for i, chunk in chunks:
+            # 过滤出当前 chunk 实际出现的人物，减少 LLM 负担
+            chars_in_chunk = [c for c in characters if c in chunk]
+            if len(chars_in_chunk) < 2:
+                continue
+                
+            prompt = f"""
+你是一个专业的古典文学数字人文分析专家。请从以下文本片段中提取人物之间的关系。
+已知在这个片段中出现的人物有: {chars_in_chunk}
+
+请提取他们之间的实质性互动关系，并输出为 JSON 数组。
+关系类型(type)必须从以下选项中选择一个:
+- hierarchical: 层级关系 (如上下级、长辈晚辈)
+- collaborative: 协作关系 (如合作、一起做事)
+- conflict: 冲突关系 (如争吵、对抗)
+- social: 社交关系 (如聊天、聚会)
+- association: 其他普通关联
+
+每个关系必须包含以下字段:
+- source: 人物1名称
+- target: 人物2名称
+- type: 关系类型
+- context: 证明该关系的简短原文上下文(20字以内)
+- sentiment: 情感倾向(0.0到1.0的浮点数，0为极度敌对/负面，1为极度友好/正面，0.5为中立)
+
+请直接输出 JSON 数组格式（不要包裹在 Markdown 代码块中），如果没有提取到任何关系，请输出 []。
+
+文本片段:
+{chunk}
+"""
+            try:
+                content = self._call_llm_with_retry(prompt)
+                
+                # json_object 模式下 deepseek 可能会返回一个包含 array 的 dict，或者直接 array
+                # 为了兼容，尝试解析
+                data = json.loads(content)
+                
+                # 处理返回格式的差异
+                if isinstance(data, dict):
+                    # 寻找第一个列表类型的值
+                    for v in data.values():
+                        if isinstance(v, list):
+                            data = v
+                            break
+                    if isinstance(data, dict):
+                        data = []
+                
+                for item in data:
+                    src = item.get("source")
+                    tgt = item.get("target")
+                    if src in characters and tgt in characters and src != tgt:
+                        pair = tuple(sorted([src, tgt]))
+                        
+                        # 改为在列表中合并同一对人物的关系（如果类型相同则认为是同一次互动被重复提取）
+                        # 这里我们不仅用 pair 区分，还要结合上下文粗略排重，或者允许同一对人物存在多次不同位置的互动
+                        # 从而在后续计算动态关系时有更多时间序列数据点
+                        # 为了避免滑动窗口重叠区完全相同的提取，我们利用上下文(context)的简单哈希来去重
+                        context_snippet = item.get("context", "")
+                        unique_interaction_key = f"{pair[0]}_{pair[1]}_{context_snippet[:10]}"
+                        
+                        if unique_interaction_key not in seen_pairs:
+                            seen_pairs.add(unique_interaction_key)
+                            relations.append(Relation(
+                                source=src,
+                                target=tgt,
+                                type=item.get("type", "association"),
+                                context=context_snippet,
+                                position=i, # 粗略位置
+                                sentiment=float(item.get("sentiment", 0.5))
+                            ))
+            except Exception as e:
+                print(f"  [LLM Extract Error at chunk {i}] {e}")
+                
+        return relations
+
+class RelationshipExtractor(BaseRelationshipExtractor):
     """人物关系抽取器
 
     通过关键词模式匹配和共现分析，从文本中抽取人物关系。
@@ -52,7 +195,7 @@ class RelationshipExtractor:
 
     def extract_relations(
         self, text: str, characters: list[str]
-    ) -> list[dict[str, Any]]:
+    ) -> List[Relation]:
         """从文本中抽取人物关系
 
         Args:
@@ -60,9 +203,9 @@ class RelationshipExtractor:
             characters: 人物列表
 
         Returns:
-            关系列表，每条包含 source, target, type, context, position
+            Relation 对象列表
         """
-        relations: list[dict[str, Any]] = []
+        relations: List[Relation] = []
         window_size = 100  # 字符窗口
 
         # 滑动窗口检测共现
@@ -81,19 +224,19 @@ class RelationshipExtractor:
             # 为窗口中的每对人物创建关系
             for j in range(len(chars_in_window)):
                 for k in range(j + 1, len(chars_in_window)):
-                    relations.append({
-                        "source": chars_in_window[j],
-                        "target": chars_in_window[k],
-                        "type": relation_type,
-                        "context": window.strip()[:200],
-                        "position": i,
-                    })
+                    relations.append(Relation(
+                        source=chars_in_window[j],
+                        target=chars_in_window[k],
+                        type=relation_type,
+                        context=window.strip()[:200],
+                        position=i
+                    ))
 
         # 去重：相同人物对只保留首次出现
         seen_pairs: set[tuple[str, str]] = set()
         unique_relations = []
         for rel in relations:
-            pair = tuple(sorted([rel["source"], rel["target"]]))
+            pair = tuple(sorted([rel.source, rel.target]))
             if pair not in seen_pairs:
                 seen_pairs.add(pair)
                 unique_relations.append(rel)
@@ -118,7 +261,7 @@ class RelationshipExtractor:
 
     def extract_relations_with_sentiment(
         self, text: str, characters: list[str]
-    ) -> list[dict[str, Any]]:
+    ) -> List[Relation]:
         """抽取关系并附带情感分析
 
         Args:
@@ -126,7 +269,7 @@ class RelationshipExtractor:
             characters: 人物列表
 
         Returns:
-            包含 sentiment 字段的关系列表
+            包含 sentiment 属性的 Relation 列表
         """
         relations = self.extract_relations(text, characters)
 
@@ -135,16 +278,16 @@ class RelationshipExtractor:
         negative_words = {"不满", "生气", "失败", "差", "糟", "问题", "担心", "反对"}
 
         for rel in relations:
-            context = rel.get("context", "")
+            context = rel.context
             pos_count = sum(1 for w in positive_words if w in context)
             neg_count = sum(1 for w in negative_words if w in context)
             total = pos_count + neg_count
             if total == 0:
-                rel["sentiment"] = 0.0  # 中性
+                rel.sentiment = 0.5  # 中性
             else:
-                rel["sentiment"] = (pos_count - neg_count) / total
-            # 归一化到 [0, 1]
-            rel["sentiment"] = (rel["sentiment"] + 1) / 2
+                sentiment = (pos_count - neg_count) / total
+                # 归一化到 [0, 1]
+                rel.sentiment = (sentiment + 1) / 2
 
         return relations
 
