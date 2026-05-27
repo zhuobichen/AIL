@@ -337,13 +337,16 @@ class NetworkVisualizer:
         if self.G is None:
             return {"nodes": [], "links": []}
 
-        nodes = [{"id": n, "name": n} for n in self.G.nodes()]
+        nodes = [{"id": n, "name": n, "top_locations": self.G.nodes[n].get("top_locations", [])} for n in self.G.nodes()]
         links = [
             {
                 "source": u,
                 "target": v,
                 "weight": d.get("weight", 1),
                 "types": d.get("types", []),
+                "sentiment": d.get("sentiment", "neutral"),
+                "context_snippet": d.get("context_snippet", ""),
+                "contexts": d.get("contexts", [])
             }
             for u, v, d in self.G.edges(data=True)
         ]

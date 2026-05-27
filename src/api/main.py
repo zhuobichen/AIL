@@ -154,6 +154,30 @@ async def get_task_results(task_id: str):
 class ChatRequest(BaseModel):
     query: str
     book: str
+    task_id: Optional[str] = None
+
+from src.rag.knowledge_base import RAGKnowledgeBase
+from src.simulation.sandbox import SandboxRequest, MultiAgentSandbox
+
+@app.post("/api/v1/simulation/run")
+async def run_simulation(req: SandboxRequest):
+    if req.task_id not in tasks:
+        raise HTTPException(status_code=404, detail="Task not found")
+        
+    task_data = tasks[req.task_id]
+    if task_data["status"] != "completed":
+        raise HTTPException(status_code=400, detail="Task is not completed yet")
+        
+    profiles_list = task_data["results"].get("profiles", [])
+    profiles_dict = {p["name"]: p for p in profiles_list}
+    graph_data = task_data["results"].get("network_analysis", {}).get("graph_data", {})
+    
+    sandbox = MultiAgentSandbox()
+    try:
+        res = await sandbox.simulate(req, profiles_dict, graph_data)
+        return res
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/v1/rag/chat")
 async def rag_chat(req: ChatRequest):
@@ -162,30 +186,53 @@ async def rag_chat(req: ChatRequest):
         from openai import AsyncOpenAI
         import os
         
-        # 1. 从向量库检索
+        # 1. 向量检索 (Text RAG)
         rag_db = RAGKnowledgeBase()
         snippets = rag_db.search(query=req.query, book_name=req.book, top_k=5)
         
-        if not snippets:
-            return {"answer": "在原著中未检索到相关内容。", "sources": []}
-            
-        # 2. 组装上下文
-        context = "\n\n---\n\n".join([f"片段 {i+1}:\n{s['text']}" for i, s in enumerate(snippets)])
+        # 2. 图谱检索 (Graph RAG)
+        graph_context = ""
+        if req.task_id and req.task_id in tasks and tasks[req.task_id]["status"] == "completed":
+            graph_data = tasks[req.task_id]["results"]["network_analysis"]["graph_data"]
+            nodes = [n["id"] for n in graph_data.get("nodes", [])]
+            # 简单的实体链接：看 query 中命中了哪些人物节点
+            matched_entities = [n for n in nodes if n in req.query]
+            if matched_entities:
+                graph_context = "【图谱知识库检索结果】：\n"
+                for entity in matched_entities:
+                    # 查找该实体的一度关联边
+                    edges = [e for e in graph_data.get("links", []) if e["source"] == entity or e["target"] == entity]
+                    # 按照权重排序，取 top 5
+                    edges = sorted(edges, key=lambda x: x.get("weight", 0), reverse=True)[:5]
+                    if edges:
+                        graph_context += f"人物 [{entity}] 的核心关系网：\n"
+                        for e in edges:
+                            other = e["target"] if e["source"] == entity else e["source"]
+                            sentiment_str = "亲密" if e.get("sentiment") == "positive" else "敌对" if e.get("sentiment") == "negative" else "中立"
+                            graph_context += f"  - 与 [{other}] 是 {e.get('type', '关联')} 关系 ({sentiment_str})，互动片段：\"{e.get('context_snippet', '')}\"\n"
+                graph_context += "\n"
         
-        # 3. 大模型回答
+        if not snippets and not graph_context:
+            return {"answer": "在原著及图谱中未检索到相关内容。", "sources": []}
+            
+        # 3. 组装上下文
+        text_context = "【原著文本检索结果】：\n" + "\n\n".join([f"片段 {i+1}:\n{s['text']}" for i, s in enumerate(snippets)])
+        
+        combined_context = f"{graph_context}{text_context}"
+        
+        # 4. 大模型回答
         client = AsyncOpenAI(
             api_key=os.getenv("DEEPSEEK_API_KEY"),
             base_url="https://api.deepseek.com/v1"
         )
         
-        prompt = f"""你是一个数字人文研究助手。请基于以下从小说《{req.book}》中检索到的原文片段，回答用户的问题。
+        prompt = f"""你是一个数字人文研究助手。请基于以下基于 GraphRAG (图谱+文本双重检索) 获取的上下文，回答用户的问题。
 要求：
-1. 必须严格基于提供的片段回答，不要编造。
-2. 尽可能引用原文细节。
-3. 如果片段中没有答案，请明确告知。
+1. 必须严格基于提供的图谱关系和原文片段回答，不要编造。
+2. 尽可能综合图谱中的宏观关系与文本片段中的微观细节。
+3. 如果上下文不足以回答，请明确告知。
 
-【原文片段】：
-{context}
+{combined_context}
 
 【用户问题】：{req.query}
 """
@@ -197,7 +244,8 @@ async def rag_chat(req: ChatRequest):
         
         return {
             "answer": response.choices[0].message.content,
-            "sources": snippets
+            "sources": snippets,
+            "graph_entities": matched_entities if 'matched_entities' in locals() else []
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

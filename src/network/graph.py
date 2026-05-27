@@ -30,20 +30,73 @@ class CharacterNetworkBuilder:
             source = rel.source
             target = rel.target
             rel_type = rel.type
+            sentiment = rel.sentiment
+            location = rel.location # 新增：提取地点
+
+            # 处理节点
+            if source not in G:
+                G.add_node(source, type='character', locations=[])
+            else:
+                G.nodes[source]['type'] = 'character'
+                if 'locations' not in G.nodes[source]:
+                    G.nodes[source]['locations'] = []
+                    
+            if target not in G:
+                G.add_node(target, type='character', locations=[])
+            else:
+                G.nodes[target]['type'] = 'character'
+                if 'locations' not in G.nodes[target]:
+                    G.nodes[target]['locations'] = []
+            
+            # 处理地点节点 (如果存在且不是"未知")
+            if location and location != "未知":
+                if location not in G:
+                    G.add_node(location, type='location')
+                # 建立人物到地点的关联边
+                G.add_edge(source, location, weight=1, type="location_link", sentiment="neutral", context="")
+                G.add_edge(target, location, weight=1, type="location_link", sentiment="neutral", context="")
 
             if G.has_edge(source, target):
                 # 累加权重
                 G[source][target]["weight"] += 1
-                # 追加关系类型
+                # 追加关系类型和情感倾向
                 if rel_type not in G[source][target]["types"]:
                     G[source][target]["types"].append(rel_type)
+                # 简单平均情感倾向 (这里假设 neutral=0.5, positive=1.0, negative=0.0，实际存储的是字符串，我们可以保留最后一次或投票)
+                # 为了简单起见，我们保留一个列表或最新状态，这里用列表记录所有互动上下文
+                if "contexts" not in G[source][target]:
+                    G[source][target]["contexts"] = []
+                G[source][target]["contexts"].append({"snippet": rel.context, "sentiment": sentiment, "location": location})
+                
+                # 统计常去地点
+                if location and location != "未知":
+                    G.nodes[source]["locations"].append(location)
+                    G.nodes[target]["locations"].append(location)
             else:
+                if location and location != "未知":
+                    G.nodes[source]["locations"].append(location)
+                    G.nodes[target]["locations"].append(location)
                 G.add_edge(
                     source,
                     target,
                     weight=1,
                     types=[rel_type],
+                    sentiment=sentiment,
+                    context_snippet=rel.context, # 兼容旧前端
+                    contexts=[{"snippet": rel.context, "sentiment": sentiment, "location": location}]
                 )
+
+        # 整理节点的地点（取最常出现的 Top 3）
+        for node in G.nodes():
+            if "locations" in G.nodes[node]:
+                locs = G.nodes[node]["locations"]
+                if locs:
+                    most_common = [loc for loc, count in Counter(locs).most_common(3)]
+                    G.nodes[node]["top_locations"] = most_common
+                else:
+                    G.nodes[node]["top_locations"] = []
+            else:
+                G.nodes[node]["top_locations"] = []
 
         self.G = G
         return G

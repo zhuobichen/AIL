@@ -21,8 +21,41 @@ export default function Report() {
   const [chatHistory, setChatHistory] = useState<{role: string, content: string, sources?: any[]}[]>([]);
   const [isChatting, setIsChatting] = useState(false);
   
+  const [isSandboxOpen, setIsSandboxOpen] = useState(false);
+  const [sandboxWhatIf, setSandboxWhatIf] = useState('');
+  const [sandboxCharacters, setSandboxCharacters] = useState<string[]>([]);
+  const [sandboxResult, setSandboxResult] = useState<any>(null);
+  const [isSimulating, setIsSimulating] = useState(false);
+  
+  const handleRunSimulation = async () => {
+    if (!sandboxWhatIf || sandboxCharacters.length < 2) return;
+    setIsSimulating(true);
+    setSandboxResult(null);
+    try {
+      const res = await fetch(`${API_BASE_URL}/simulation/run`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          query: "", // Not used
+          book: "longzu", 
+          task_id: taskId,
+          what_if: sandboxWhatIf,
+          characters: sandboxCharacters,
+          num_turns: 4
+        })
+      });
+      const data = await res.json();
+      setSandboxResult(data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSimulating(false);
+    }
+  };
+  
   // 选中的关系片段
   const [selectedRelation, setSelectedRelation] = useState<any>(null);
+  const [selectedNode, setSelectedNode] = useState<any>(null);
 
   useEffect(() => {
     if (!taskId) return;
@@ -100,7 +133,7 @@ export default function Report() {
       const res = await fetch(`${API_BASE_URL}/rag/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query, book })
+        body: JSON.stringify({ query, book, task_id: taskId })
       });
       
       const data = await res.json();
@@ -125,29 +158,39 @@ export default function Report() {
           snippet: params.data.context_snippet || "暂无原文片段",
           sentiment: params.data.sentiment || "neutral"
         });
+        setSelectedNode(null);
+      } else if (params.dataType === 'node') {
+        setSelectedNode(params.data);
+        setSelectedRelation(null);
       }
     }
   };
 
   // 转换 NetworkX JSON 为 ECharts 格式
-  const nodes = currentGraphData.nodes.map((node: any) => ({
-    id: node.id,
-    name: node.id,
-    symbolSize: Math.max(20, (network_analysis.degree_centrality[node.id] || 0) * 100),
-    category: network_analysis.communities.findIndex((c: string[]) => c.includes(node.id)),
-    itemStyle: {
-      borderColor: node.id === network_analysis.main_character ? '#22d3ee' : 'transparent',
-      borderWidth: node.id === network_analysis.main_character ? 4 : 0,
-      shadowBlur: 10,
-      shadowColor: 'rgba(0,0,0,0.5)'
-    }
-  }));
+  const nodes = currentGraphData.nodes.map((node: any) => {
+    const isLocation = node.type === 'location';
+    return {
+      id: node.id,
+      name: node.id,
+      symbolSize: isLocation ? 15 : Math.max(20, (network_analysis.degree_centrality[node.id] || 0) * 100),
+      category: network_analysis.communities.findIndex((c: string[]) => c.includes(node.id)),
+      symbol: isLocation ? 'square' : 'circle',
+      itemStyle: {
+        ...(isLocation ? { color: '#eab308' } : {}),
+        borderColor: node.id === network_analysis.main_character ? '#22d3ee' : 'transparent',
+        borderWidth: node.id === network_analysis.main_character ? 4 : 0,
+        shadowBlur: 10,
+        shadowColor: 'rgba(0,0,0,0.5)'
+      }
+    };
+  });
 
   const links = currentGraphData.links.map((link: any) => {
     // 根据 sentiment 决定红绿颜色
     let color = 'source';
     if (link.sentiment === 'positive') color = '#10b981'; // 绿
     else if (link.sentiment === 'negative') color = '#ef4444'; // 红
+    else if (link.type === 'location_link') color = '#eab308'; // 黄
     
     return {
       source: link.source,
@@ -156,8 +199,9 @@ export default function Report() {
       context_snippet: link.context_snippet,
       sentiment: link.sentiment,
       lineStyle: { 
-        width: Math.sqrt(link.weight || 1) * 2,
+        width: link.type === 'location_link' ? 1 : Math.sqrt(link.weight || 1) * 2,
         color: color,
+        type: link.type === 'location_link' ? 'dashed' : 'solid',
         opacity: link.sentiment === 'neutral' ? 0.3 : 0.8
       }
     };
@@ -236,37 +280,47 @@ export default function Report() {
                 世界观全景解析报告
               </span>
             </h1>
-            <p className="text-gray-400 mt-2 text-lg">基于 {graphData.nodes.length} 名角色和 {graphData.links.length} 段关系连接</p>
+            <p className="text-gray-400 mt-2 text-lg">基于 {currentGraphData.nodes.length} 名角色和 {currentGraphData.links.length} 段关系连接</p>
           </div>
           
-          {/* 时间轴播放控制 */}
-          {temporal_graphs.length > 0 && (
-            <div className="flex items-center gap-4 bg-gray-900/50 p-3 rounded-2xl border border-gray-800">
-              <button 
-                onClick={handlePlay}
-                className="p-3 bg-cyan-600 hover:bg-cyan-500 rounded-xl text-white transition-colors"
-              >
-                {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
-              </button>
-              <div className="flex flex-col w-48">
-                <div className="flex justify-between text-xs text-gray-400 mb-1">
-                  <span>剧情演化</span>
-                  <span>{currentStage >= 0 ? temporal_graphs[currentStage].progress_percent : 100}%</span>
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => setIsSandboxOpen(true)}
+              className="px-6 py-3 bg-purple-600 hover:bg-purple-500 text-white rounded-2xl shadow-[0_0_15px_rgba(147,51,234,0.3)] flex items-center gap-2 transition-all font-medium"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path></svg>
+              进入平行沙盘
+            </button>
+
+            {/* 时间轴播放控制 */}
+            {temporal_graphs.length > 0 && (
+              <div className="flex items-center gap-4 bg-gray-900/50 p-3 rounded-2xl border border-gray-800">
+                <button 
+                  onClick={handlePlay}
+                  className="p-3 bg-cyan-600 hover:bg-cyan-500 rounded-xl text-white transition-colors"
+                >
+                  {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
+                </button>
+                <div className="flex flex-col w-48">
+                  <div className="flex justify-between text-xs text-gray-400 mb-1">
+                    <span>剧情演化</span>
+                    <span>{currentStage >= 0 ? temporal_graphs[currentStage].progress_percent : 100}%</span>
+                  </div>
+                  <input 
+                    type="range" 
+                    min={0} 
+                    max={temporal_graphs.length - 1} 
+                    value={currentStage >= 0 ? currentStage : temporal_graphs.length - 1}
+                    onChange={(e) => {
+                      if (isPlaying) handlePlay(); // 暂停播放
+                      setCurrentStage(parseInt(e.target.value));
+                    }}
+                    className="w-full accent-cyan-500"
+                  />
                 </div>
-                <input 
-                  type="range" 
-                  min={0} 
-                  max={temporal_graphs.length - 1} 
-                  value={currentStage >= 0 ? currentStage : temporal_graphs.length - 1}
-                  onChange={(e) => {
-                    if (isPlaying) handlePlay(); // 暂停播放
-                    setCurrentStage(parseInt(e.target.value));
-                  }}
-                  className="w-full accent-cyan-500"
-                />
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </motion.div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -285,6 +339,37 @@ export default function Report() {
               <ReactECharts option={option} style={{ height: '100%', width: '100%' }} onEvents={onEvents} />
             </div>
             
+            {/* 节点溯源悬浮窗 */}
+            {selectedNode && (
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="absolute left-8 bottom-8 w-96 bg-gray-900/95 border border-cyan-500/30 rounded-xl p-6 shadow-[0_0_30px_rgba(6,182,212,0.15)] backdrop-blur-md z-10"
+              >
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h2 className="text-3xl font-bold text-white mb-2">{selectedNode.id}</h2>
+                    {selectedNode.top_locations && selectedNode.top_locations.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        <span className="text-xs text-gray-400">常去地点:</span>
+                        {selectedNode.top_locations.map((loc: string, i: number) => (
+                          <span key={i} className="px-2 py-0.5 rounded text-xs bg-gray-800 text-blue-300 border border-gray-700">
+                            📍 {loc}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <button 
+                    onClick={() => setSelectedNode(null)}
+                    className="text-gray-400 hover:text-white"
+                  >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                  </button>
+                </div>
+              </motion.div>
+            )}
+
             {/* 选中关系原文溯源浮层 */}
             <AnimatePresence>
               {selectedRelation && (
@@ -305,7 +390,35 @@ export default function Report() {
                       关闭
                     </button>
                   </div>
-                  <p className="text-sm text-gray-300 italic">"{selectedRelation.snippet}"</p>
+                  <div className="space-y-3 max-h-60 overflow-y-auto custom-scrollbar pr-2">
+                    {selectedRelation.contexts?.map((ctx: any, i: number) => (
+                      <div key={i} className="text-sm text-gray-300 bg-gray-800/50 p-3 rounded-lg border border-gray-700/50">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className={`w-2 h-2 rounded-full ${
+                            ctx.sentiment === 'positive' ? 'bg-green-500' :
+                            ctx.sentiment === 'negative' ? 'bg-red-500' : 'bg-gray-400'
+                          }`}></span>
+                          {ctx.location && ctx.location !== "未知" && (
+                            <span className="text-xs text-blue-400 bg-blue-400/10 px-2 py-0.5 rounded">
+                              📍 {ctx.location}
+                            </span>
+                          )}
+                        </div>
+                        "{ctx.snippet}"
+                      </div>
+                    ))}
+                    {(!selectedRelation.contexts || selectedRelation.contexts.length === 0) && (
+                      <div className="text-sm text-gray-300 bg-gray-800/50 p-3 rounded-lg border border-gray-700/50">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className={`w-2 h-2 rounded-full ${
+                            selectedRelation.sentiment === 'positive' ? 'bg-green-500' :
+                            selectedRelation.sentiment === 'negative' ? 'bg-red-500' : 'bg-gray-400'
+                          }`}></span>
+                        </div>
+                        "{selectedRelation.snippet}"
+                      </div>
+                    )}
+                  </div>
                 </motion.div>
               )}
             </AnimatePresence>
@@ -434,6 +547,149 @@ export default function Report() {
         </div>
 
       </div>
+
+      {/* Sandbox Overlay */}
+      <AnimatePresence>
+        {isSandboxOpen && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xl flex items-center justify-center p-8"
+          >
+            <div className="w-full max-w-6xl h-full bg-gray-900 border border-purple-500/30 rounded-2xl flex overflow-hidden shadow-[0_0_50px_rgba(147,51,234,0.2)]">
+              {/* Left Panel: Config */}
+              <div className="w-1/3 bg-gray-900/50 border-r border-gray-800 p-6 flex flex-col">
+                <div className="flex justify-between items-center mb-8">
+                  <h2 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-cyan-400">
+                    平行世界沙盘
+                  </h2>
+                  <button onClick={() => setIsSandboxOpen(false)} className="text-gray-400 hover:text-white">
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                  </button>
+                </div>
+                
+                <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
+                  <div className="mb-6">
+                    <label className="block text-sm font-medium text-purple-300 mb-2">1. 选择登场角色 (至少2个)</label>
+                    <div className="flex flex-wrap gap-2">
+                      {topCharacters.map(([name]: any) => (
+                        <button
+                          key={name}
+                          onClick={() => {
+                            if (sandboxCharacters.includes(name)) {
+                              setSandboxCharacters(sandboxCharacters.filter(c => c !== name));
+                            } else {
+                              setSandboxCharacters([...sandboxCharacters, name]);
+                            }
+                          }}
+                          className={`px-3 py-1 rounded-full text-sm transition-all ${
+                            sandboxCharacters.includes(name) 
+                            ? 'bg-purple-600 text-white shadow-[0_0_10px_rgba(147,51,234,0.5)] border border-purple-400' 
+                            : 'bg-gray-800 text-gray-400 border border-gray-700 hover:border-purple-500/50'
+                          }`}
+                        >
+                          {name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  <div className="mb-6">
+                    <label className="block text-sm font-medium text-cyan-300 mb-2">2. 注入蝴蝶效应 (假设变量)</label>
+                    <textarea
+                      value={sandboxWhatIf}
+                      onChange={(e) => setSandboxWhatIf(e.target.value)}
+                      placeholder="例如：如果楚子航没有爆血，而是选择向卡塞尔学院求援会怎样？"
+                      className="w-full bg-gray-800 border border-gray-700 rounded-xl p-4 text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 h-32 resize-none"
+                    />
+                  </div>
+                </div>
+                
+                <button
+                  onClick={handleRunSimulation}
+                  disabled={isSimulating || sandboxCharacters.length < 2 || !sandboxWhatIf}
+                  className={`w-full py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-2 transition-all mt-4 ${
+                    isSimulating || sandboxCharacters.length < 2 || !sandboxWhatIf
+                    ? 'bg-gray-800 text-gray-500 cursor-not-allowed'
+                    : 'bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white shadow-[0_0_20px_rgba(147,51,234,0.4)]'
+                  }`}
+                >
+                  {isSimulating ? (
+                    <>
+                      <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
+                      正在沙盘中推演...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                      启动深度记忆流推演
+                    </>
+                  )}
+                </button>
+              </div>
+              
+              {/* Right Panel: Result */}
+              <div className="flex-1 bg-gray-900 p-8 flex flex-col relative">
+                {!sandboxResult && !isSimulating ? (
+                  <div className="flex-1 flex flex-col items-center justify-center text-gray-500">
+                    <svg className="w-24 h-24 mb-4 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path></svg>
+                    <p className="text-xl font-medium">配置左侧参数，开始创造平行世界</p>
+                    <p className="text-sm mt-2">基于 {topCharacters.length} 名角色的性格与数十万字记忆图谱进行推演</p>
+                  </div>
+                ) : isSimulating ? (
+                  <div className="flex-1 flex flex-col items-center justify-center">
+                    <div className="w-16 h-16 border-4 border-purple-500/20 border-t-purple-500 rounded-full animate-spin mb-6"></div>
+                    <h3 className="text-2xl font-bold text-white mb-2 animate-pulse">正在唤醒角色 Agent...</h3>
+                    <p className="text-cyan-400 font-mono text-sm">Loading Context from GraphRAG...</p>
+                  </div>
+                ) : (
+                  <div className="flex-1 overflow-y-auto custom-scrollbar pr-4 flex flex-col gap-6">
+                    <div className="bg-purple-900/20 border border-purple-500/30 rounded-xl p-6">
+                      <h3 className="text-purple-400 text-sm font-bold uppercase tracking-wider mb-2">上帝视角总结 (Director's Summary)</h3>
+                      <p className="text-gray-200 leading-relaxed text-lg">{sandboxResult.summary}</p>
+                    </div>
+                    
+                    <div className="space-y-6 relative">
+                      {/* 连接对话的时间线 */}
+                      <div className="absolute left-6 top-6 bottom-6 w-0.5 bg-gradient-to-b from-purple-500/50 to-cyan-500/50"></div>
+                      
+                      {sandboxResult.script.map((msg: any, i: number) => (
+                        <motion.div 
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: i * 0.3 }}
+                          key={i} 
+                          className="flex gap-4 relative z-10"
+                        >
+                          <div className="w-12 h-12 rounded-full bg-gray-900 flex items-center justify-center font-bold text-white shadow-[0_0_15px_rgba(6,182,212,0.3)] flex-shrink-0 border-2 border-cyan-500 z-10 relative mt-2">
+                            {msg.character[0]}
+                            {/* 顺序序号角标 */}
+                            <div className="absolute -bottom-2 -right-2 bg-purple-600 text-[10px] w-5 h-5 rounded-full flex items-center justify-center border border-gray-900">
+                              {i + 1}
+                            </div>
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-baseline gap-2 mb-1">
+                              <span className="font-bold text-cyan-400 text-lg">{msg.character}</span>
+                              {msg.action && <span className="text-sm text-purple-400 italic bg-purple-900/30 px-2 py-0.5 rounded-full border border-purple-500/20">({msg.action})</span>}
+                            </div>
+                            <div className="bg-gray-800 border border-gray-700 hover:border-cyan-500/50 transition-colors rounded-2xl rounded-tl-none p-5 text-gray-200 leading-relaxed shadow-lg text-lg relative">
+                              {/* 气泡小尾巴 */}
+                              <div className="absolute -left-2 top-4 w-4 h-4 bg-gray-800 border-l border-t border-gray-700 transform -rotate-45"></div>
+                              {msg.content}
+                            </div>
+                          </div>
+                        </motion.div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

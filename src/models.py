@@ -38,6 +38,7 @@ class Relation(BaseModel):
     position: int = Field(default=0, description="在文本中的位置索引")
     sentiment: Literal['positive', 'negative', 'neutral'] = Field(default='neutral', description="情感极性：敌对/亲密/中立")
     time: Optional[TimeInfo] = Field(None, description="互动发生的时间")
+    location: str = Field(default="", description="关系发生的地点/场景")
 
 # ==========================================
 # 2. 人物画像模型 (Character Profiles)
@@ -77,6 +78,7 @@ class CharacterProfile(BaseModel):
     traits: Traits = Field(default_factory=Traits)
     emotions: EmotionProfile = Field(default_factory=EmotionProfile)
     communication_style: CommunicationStyle = Field(default_factory=CommunicationStyle)
+    locations: List[str] = Field(default_factory=list, description="该人物常出现的地点")
 
 # ==========================================
 # 3. 网络分析模型 (Network Analysis)

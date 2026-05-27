@@ -160,7 +160,19 @@ class NarrativePipeline:
                 print(f"  块 {i+1}/{len(converted_texts)} 提取完毕, 新增关系数: {len(rels)}")
 
         G = self.network_builder.build_network(relations)
-        network_analysis = self.network_builder.analyze_network()
+        stats = self.network_builder.analyze_network()
+        
+        from src.models import NetworkAnalysis
+        import networkx as nx
+        
+        network_analysis = NetworkAnalysis(
+            degree_centrality=stats.degree_centrality,
+            betweenness_centrality=stats.betweenness_centrality,
+            communities=stats.communities,
+            main_character=stats.main_character or "",
+            graph_data=nx.node_link_data(G),
+            temporal_graphs=None
+        )
         
         # 增加时间轴图谱切片计算 (Temporal Graph)
         temporal_graphs = []

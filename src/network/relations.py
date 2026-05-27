@@ -97,7 +97,8 @@ class LLMRelationshipExtractor(BaseRelationshipExtractor):
 - target: 人物2名称
 - type: 关系类型
 - context: 证明该关系的简短原文上下文(20字以内)
-- sentiment: 情感倾向(0.0到1.0的浮点数，0为极度敌对/负面，1为极度友好/正面，0.5为中立)
+- sentiment: 情感倾向，必须是 'positive'(亲密/友好)、'negative'(敌对/冲突) 或 'neutral'(中立) 之一。
+- location: 该互动发生的地点或场景名称（如：卡塞尔学院、诺顿馆、网吧、冰海）。如果文本中未提及具体地点，请填写"未知"。
 
 请直接输出 JSON 数组格式（不要包裹在 Markdown 代码块中），如果没有提取到任何关系，请输出 []。
 
@@ -120,6 +121,41 @@ class LLMRelationshipExtractor(BaseRelationshipExtractor):
                             break
                     if isinstance(data, dict):
                         data = []
+                        
+                # --- 多智能体自我纠错 (Agentic Workflow - Reviewer Agent) ---
+                if data and len(data) > 0:
+                    review_prompt = f"""
+你是一个极其严格的数字人文事实审查员 (Reviewer Agent)。
+你的任务是审查由提取器(Extractor)刚刚从以下原文片段中提取出的人物关系。
+
+【原文片段】：
+{chunk}
+
+【待审查的关系数组 (JSON)】：
+{json.dumps(data, ensure_ascii=False)}
+
+请严格执行以下审查：
+1. 幻觉剔除：如果在原文片段中找不到明确的依据，必须果断删除该关系。
+2. 极性修正：检查 sentiment 是否准确反映了片段中的情感，且值必须为 'positive', 'negative' 或 'neutral'。
+3. 证据核实：确保 context 字段准确引用了片段中的原文。
+4. 地点核实：确保 location 字段准确反映了原文中的地点，不可凭空捏造。如果互动并未发生在该提取地点，必须删除或修正该关系。
+
+请直接输出修正后的 JSON 数组（不要包裹在 Markdown 代码块中），格式与待审查结果完全一致。如果所有提取都是错误的，请输出 []。
+"""
+                    try:
+                        review_content = self._call_llm_with_retry(review_prompt)
+                        corrected_data = json.loads(review_content)
+                        if isinstance(corrected_data, dict):
+                            for v in corrected_data.values():
+                                if isinstance(v, list):
+                                    corrected_data = v
+                                    break
+                            if isinstance(corrected_data, dict):
+                                corrected_data = []
+                        data = corrected_data
+                    except Exception as e:
+                        print(f"  [Reviewer Agent Error at chunk {i}] {e}，降级使用初始提取结果")
+                # -----------------------------------------------------------------
                 
                 for item in data:
                     src = item.get("source")
@@ -140,9 +176,10 @@ class LLMRelationshipExtractor(BaseRelationshipExtractor):
                                 source=src,
                                 target=tgt,
                                 type=item.get("type", "association"),
-                                context=context_snippet,
-                                position=i, # 粗略位置
-                                sentiment=float(item.get("sentiment", 0.5))
+                                context=context_snippet[:20],
+                                position=i,  # 粗略位置
+                                sentiment=item.get("sentiment", "neutral"),
+                                location=item.get("location", "未知")
                             ))
             except Exception as e:
                 print(f"  [LLM Extract Error at chunk {i}] {e}")
@@ -229,7 +266,8 @@ class RelationshipExtractor(BaseRelationshipExtractor):
                         target=chars_in_window[k],
                         type=relation_type,
                         context=window.strip()[:200],
-                        position=i
+                        position=i,
+                        location="未知"
                     ))
 
         # 去重：相同人物对只保留首次出现
