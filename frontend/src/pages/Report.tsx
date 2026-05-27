@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { getTaskResults, API_BASE_URL } from '@/api/client';
+import { getTaskResults, getTaskStatus, API_BASE_URL } from '@/api/client';
 import ReactECharts from 'echarts-for-react';
 import { Loader2, ArrowLeft, Users, Zap, Award, MessageSquare, Play, Pause, ChevronRight } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -10,6 +10,7 @@ export default function Report() {
   const navigate = useNavigate();
   const [results, setResults] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [taskStatus, setTaskStatus] = useState<any>(null);
   
   // 时间轴控制状态
   const [currentStage, setCurrentStage] = useState(-1);
@@ -37,7 +38,7 @@ export default function Report() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           query: "", // Not used
-          book: "longzu", 
+          book: taskStatus?.book_name || "longzu", 
           task_id: taskId,
           what_if: sandboxWhatIf,
           characters: sandboxCharacters,
@@ -59,8 +60,12 @@ export default function Report() {
 
   useEffect(() => {
     if (!taskId) return;
-    getTaskResults(taskId).then(data => {
+    Promise.all([
+      getTaskResults(taskId),
+      getTaskStatus(taskId)
+    ]).then(([data, statusData]) => {
       setResults(data);
+      setTaskStatus(statusData);
       if (data?.network_analysis?.temporal_graphs?.length > 0) {
         setCurrentStage(data.network_analysis.temporal_graphs.length - 1);
       }
@@ -128,7 +133,7 @@ export default function Report() {
     
     try {
       // 从 URL 获取书籍名称，默认假设是第一本书
-      const book = "longzu"; 
+      const book = taskStatus?.book_name || "longzu"; 
       
       const res = await fetch(`${API_BASE_URL}/rag/chat`, {
         method: 'POST',

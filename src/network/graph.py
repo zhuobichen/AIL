@@ -60,6 +60,8 @@ class CharacterNetworkBuilder:
                 # 累加权重
                 G[source][target]["weight"] += 1
                 # 追加关系类型和情感倾向
+                if "types" not in G[source][target]:
+                    G[source][target]["types"] = []
                 if rel_type not in G[source][target]["types"]:
                     G[source][target]["types"].append(rel_type)
                 # 简单平均情感倾向 (这里假设 neutral=0.5, positive=1.0, negative=0.0，实际存储的是字符串，我们可以保留最后一次或投票)
@@ -116,15 +118,20 @@ class CharacterNetworkBuilder:
 
         G = self.G
 
+        # 为了不污染社区检测和中心性计算，我们需要过滤掉 'location' 类型的节点
+        # 创建一个只包含人物节点的子图
+        character_nodes = [n for n, attr in G.nodes(data=True) if attr.get('type') == 'character']
+        person_graph = G.subgraph(character_nodes)
+
         # 度中心性（谁认识的人多）
-        degree_cent = nx.degree_centrality(G)
+        degree_cent = nx.degree_centrality(person_graph)
 
         # 介数中心性（谁是信息桥梁）
-        betweenness_cent = nx.betweenness_centrality(G)
+        betweenness_cent = nx.betweenness_centrality(person_graph)
 
         # 社区检测
         try:
-            communities_raw = list(nx.community.greedy_modularity_communities(G))
+            communities_raw = list(nx.community.greedy_modularity_communities(person_graph))
             communities = [list(c) for c in communities_raw]
         except Exception:
             communities = []

@@ -33,6 +33,16 @@ app.add_middleware(
 # 内存中的任务存储 (MVP阶段使用，生产环境应使用 Redis/PostgreSQL)
 tasks_db: Dict[str, Dict[str, Any]] = {}
 
+# 全局单例 RAG 知识库，避免重复冷启动
+rag_db_instance = None
+
+def get_rag_db():
+    global rag_db_instance
+    if rag_db_instance is None:
+        from src.rag.knowledge_base import RAGKnowledgeBase
+        rag_db_instance = RAGKnowledgeBase()
+    return rag_db_instance
+
 class TaskStatusResponse(BaseModel):
     task_id: str
     status: str
@@ -151,20 +161,14 @@ async def get_task_results(task_id: str):
         
     return tasks_db[task_id]["results"]
 
-class ChatRequest(BaseModel):
-    query: str
-    book: str
-    task_id: Optional[str] = None
-
-from src.rag.knowledge_base import RAGKnowledgeBase
 from src.simulation.sandbox import SandboxRequest, MultiAgentSandbox
 
 @app.post("/api/v1/simulation/run")
 async def run_simulation(req: SandboxRequest):
-    if req.task_id not in tasks:
+    if req.task_id not in tasks_db:
         raise HTTPException(status_code=404, detail="Task not found")
         
-    task_data = tasks[req.task_id]
+    task_data = tasks_db[req.task_id]
     if task_data["status"] != "completed":
         raise HTTPException(status_code=400, detail="Task is not completed yet")
         
@@ -172,28 +176,34 @@ async def run_simulation(req: SandboxRequest):
     profiles_dict = {p["name"]: p for p in profiles_list}
     graph_data = task_data["results"].get("network_analysis", {}).get("graph_data", {})
     
+    # 将沙盘实例化，并注入单例的 rag_db
     sandbox = MultiAgentSandbox()
+    sandbox.rag_db = get_rag_db()
+    
     try:
         res = await sandbox.simulate(req, profiles_dict, graph_data)
         return res
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+class ChatRequest(BaseModel):
+    task_id: str
+    query: str
+    book: str
+
 @app.post("/api/v1/rag/chat")
 async def rag_chat(req: ChatRequest):
     try:
-        from src.rag.knowledge_base import RAGKnowledgeBase
         from openai import AsyncOpenAI
         import os
         
-        # 1. 向量检索 (Text RAG)
-        rag_db = RAGKnowledgeBase()
+        rag_db = get_rag_db()
         snippets = rag_db.search(query=req.query, book_name=req.book, top_k=5)
         
         # 2. 图谱检索 (Graph RAG)
         graph_context = ""
-        if req.task_id and req.task_id in tasks and tasks[req.task_id]["status"] == "completed":
-            graph_data = tasks[req.task_id]["results"]["network_analysis"]["graph_data"]
+        if req.task_id and req.task_id in tasks_db and tasks_db[req.task_id]["status"] == "completed":
+            graph_data = tasks_db[req.task_id]["results"]["network_analysis"]["graph_data"]
             nodes = [n["id"] for n in graph_data.get("nodes", [])]
             # 简单的实体链接：看 query 中命中了哪些人物节点
             matched_entities = [n for n in nodes if n in req.query]

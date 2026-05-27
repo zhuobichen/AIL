@@ -27,7 +27,7 @@ class MultiAgentSandbox:
             api_key=os.getenv("DEEPSEEK_API_KEY"),
             base_url="https://api.deepseek.com/v1"
         )
-        self.rag_db = RAGKnowledgeBase()
+        self.rag_db = None
         
     async def simulate(self, req: SandboxRequest, profiles: Dict[str, Any], graph_data: Dict[str, Any]) -> SandboxResponse:
         # 1. 组装角色设定 (Profiles)
@@ -51,8 +51,11 @@ class MultiAgentSandbox:
                         relation_context[char].append(f"你与 {other} 的关系是 {e.get('type')} ({sentiment})")
 
         # 3. 组装 RAG 背景知识
-        snippets = self.rag_db.search(query=" ".join(req.characters) + " " + req.what_if, book_name=req.book, top_k=3)
-        rag_context = "\n".join([s.get('text', '') for s in snippets]) if snippets else "暂无背景知识"
+        if self.rag_db:
+            snippets = self.rag_db.search(query=" ".join(req.characters) + " " + req.what_if, book_name=req.book, top_k=3)
+            rag_context = "\n".join([s.get('text', '') for s in snippets]) if snippets else "暂无背景知识"
+        else:
+            rag_context = "暂无背景知识"
 
         # 4. 链式记忆流多回合推演 (Memory Stream Loop)
         script_objs = []

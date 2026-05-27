@@ -74,11 +74,16 @@ class LLMRelationshipExtractor(BaseRelationshipExtractor):
         
         print(f"  [LLM] 文本已被切分为 {len(chunks)} 块(带重叠)，开始深度抽取 (支持断点续传)...")
         
-        for i, chunk in chunks:
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        import threading
+        
+        lock = threading.Lock()
+        
+        def process_chunk(i, chunk):
             # 过滤出当前 chunk 实际出现的人物，减少 LLM 负担
             chars_in_chunk = [c for c in characters if c in chunk]
             if len(chars_in_chunk) < 2:
-                continue
+                return []
                 
             prompt = f"""
 你是一个专业的古典文学数字人文分析专家。请从以下文本片段中提取人物之间的关系。
@@ -105,6 +110,7 @@ class LLMRelationshipExtractor(BaseRelationshipExtractor):
 文本片段:
 {chunk}
 """
+            chunk_relations = []
             try:
                 content = self._call_llm_with_retry(prompt)
                 
@@ -170,19 +176,27 @@ class LLMRelationshipExtractor(BaseRelationshipExtractor):
                         context_snippet = item.get("context", "")
                         unique_interaction_key = f"{pair[0]}_{pair[1]}_{context_snippet[:10]}"
                         
-                        if unique_interaction_key not in seen_pairs:
-                            seen_pairs.add(unique_interaction_key)
-                            relations.append(Relation(
-                                source=src,
-                                target=tgt,
-                                type=item.get("type", "association"),
-                                context=context_snippet[:20],
-                                position=i,  # 粗略位置
-                                sentiment=item.get("sentiment", "neutral"),
-                                location=item.get("location", "未知")
-                            ))
+                        with lock:
+                            if unique_interaction_key not in seen_pairs:
+                                seen_pairs.add(unique_interaction_key)
+                                chunk_relations.append(Relation(
+                                    source=src,
+                                    target=tgt,
+                                    type=item.get("type", "association"),
+                                    context=context_snippet[:20],
+                                    position=i,  # 粗略位置
+                                    sentiment=item.get("sentiment", "neutral"),
+                                    location=item.get("location", "未知")
+                                ))
             except Exception as e:
                 print(f"  [LLM Extract Error at chunk {i}] {e}")
+                
+            return chunk_relations
+
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            futures = [executor.submit(process_chunk, i, chunk) for i, chunk in chunks]
+            for future in as_completed(futures):
+                relations.extend(future.result())
                 
         return relations
 
