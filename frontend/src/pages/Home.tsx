@@ -72,11 +72,11 @@ export default function Home() {
             initial={{ scale: 0.8, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ delay: 0.2, duration: 0.5 }}
-            className="inline-flex items-center justify-center p-3 mb-6 rounded-2xl bg-gray-900/50 border border-gray-800 shadow-xl backdrop-blur-xl"
+            className="inline-flex items-center justify-center p-3 mb-6 rounded-2xl glass-panel neon-border-cyan"
           >
             <Activity className="w-8 h-8 text-cyan-400" />
           </motion.div>
-          <h1 className="text-5xl md:text-6xl font-black mb-6 tracking-tight text-transparent bg-clip-text bg-gradient-to-br from-white via-gray-200 to-gray-500">
+          <h1 className="text-5xl md:text-6xl font-black mb-6 tracking-tight text-transparent bg-clip-text bg-gradient-to-br from-white via-gray-200 to-gray-500 font-serif-sc">
             数字人文叙事 <span className="text-cyan-400">AI</span>
           </h1>
           <p className="text-lg text-gray-400 max-w-2xl mx-auto font-light">
@@ -84,7 +84,7 @@ export default function Home() {
           </p>
         </div>
 
-        <div className="bg-gray-900/40 backdrop-blur-2xl border border-gray-800/50 rounded-3xl p-8 shadow-2xl">
+        <div className="glass-panel rounded-3xl p-8">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             
             {/* File Upload Zone */}
@@ -94,8 +94,8 @@ export default function Home() {
               </label>
               <div 
                 className={`relative group flex flex-col items-center justify-center w-full h-48 border-2 border-dashed rounded-2xl transition-all duration-300 ease-in-out cursor-pointer overflow-hidden
-                  ${dragActive ? 'border-cyan-500 bg-cyan-950/20' : 'border-gray-800 hover:border-gray-600 bg-gray-950/50'}
-                  ${file ? 'border-green-500/50 bg-green-950/10' : ''}
+                  ${dragActive ? 'neon-border-cyan bg-cyan-950/20' : 'border-gray-700 hover:neon-border-cyan bg-black/20'}
+                  ${file ? 'neon-border-cyan bg-green-950/10' : ''}
                 `}
                 onDragEnter={handleDrag}
                 onDragLeave={handleDrag}
@@ -145,7 +145,7 @@ export default function Home() {
                   <select 
                     value={book} 
                     onChange={(e) => setBook(e.target.value)}
-                    className="w-full bg-gray-950/50 border border-gray-800 text-gray-200 rounded-xl px-4 py-3 appearance-none focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all"
+                    className="w-full bg-black/40 border border-gray-700 text-gray-200 rounded-xl px-4 py-3 appearance-none focus:outline-none focus:neon-border-cyan transition-all"
                   >
                     <option value="longzu">《龙族》全集 (江南)</option>
                     <option value="hongloumeng">《红楼梦》 (曹雪芹)</option>
@@ -164,7 +164,7 @@ export default function Home() {
                 onClick={handleSubmit}
                 disabled={!file || isUploading}
                 className={`group relative w-full flex items-center justify-center gap-2 py-4 rounded-xl font-medium transition-all overflow-hidden
-                  ${!file ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-cyan-600 hover:bg-cyan-500 text-white shadow-[0_0_20px_rgba(8,145,178,0.4)] hover:shadow-[0_0_30px_rgba(8,145,178,0.6)]'}
+                  ${!file ? 'bg-gray-800 text-gray-500 cursor-not-allowed' : 'bg-cyan-600/80 hover:bg-cyan-500 text-white neon-border-cyan backdrop-blur-md'}
                 `}
               >
                 {isUploading ? (

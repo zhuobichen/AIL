@@ -280,7 +280,7 @@ export default function Report() {
             >
               <ArrowLeft className="w-4 h-4" /> 返回首页
             </button>
-            <h1 className="text-4xl font-black text-white flex items-center gap-4">
+            <h1 className="text-4xl font-black text-white flex items-center gap-4 font-serif-sc">
               <span className="bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-blue-500">
                 世界观全景解析报告
               </span>
@@ -291,7 +291,7 @@ export default function Report() {
           <div className="flex items-center gap-4">
             <button
               onClick={() => setIsSandboxOpen(true)}
-              className="px-6 py-3 bg-purple-600 hover:bg-purple-500 text-white rounded-2xl shadow-[0_0_15px_rgba(147,51,234,0.3)] flex items-center gap-2 transition-all font-medium"
+              className="px-6 py-3 bg-purple-600/80 hover:bg-purple-500 text-white rounded-2xl shadow-[0_0_15px_rgba(147,51,234,0.3)] flex items-center gap-2 transition-all font-medium neon-border-purple backdrop-blur-md"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path></svg>
               进入平行沙盘
@@ -299,10 +299,10 @@ export default function Report() {
 
             {/* 时间轴播放控制 */}
             {temporal_graphs.length > 0 && (
-              <div className="flex items-center gap-4 bg-gray-900/50 p-3 rounded-2xl border border-gray-800">
+              <div className="flex items-center gap-4 glass-panel p-3 rounded-2xl">
                 <button 
                   onClick={handlePlay}
-                  className="p-3 bg-cyan-600 hover:bg-cyan-500 rounded-xl text-white transition-colors"
+                  className="p-3 bg-cyan-600/80 hover:bg-cyan-500 rounded-xl text-white transition-colors backdrop-blur-md"
                 >
                   {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
                 </button>
@@ -334,10 +334,10 @@ export default function Report() {
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: 0.2 }}
-            className="lg:col-span-2 bg-gray-900/40 backdrop-blur-md border border-gray-800 rounded-3xl p-6 shadow-2xl relative overflow-hidden"
+            className="lg:col-span-2 glass-panel rounded-3xl p-6 relative overflow-hidden"
           >
             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-cyan-500 via-purple-500 to-pink-500" />
-            <h2 className="text-xl font-bold mb-6 flex items-center gap-2 text-gray-100">
+            <h2 className="text-xl font-bold mb-6 flex items-center gap-2 text-gray-100 font-serif-sc">
               <Users className="w-5 h-5 text-cyan-400" /> 社交网络拓扑图
             </h2>
             <div className="h-[600px] w-full">
@@ -349,7 +349,7 @@ export default function Report() {
               <motion.div 
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="absolute left-8 bottom-8 w-96 bg-gray-900/95 border border-cyan-500/30 rounded-xl p-6 shadow-[0_0_30px_rgba(6,182,212,0.15)] backdrop-blur-md z-10"
+                className="absolute left-8 bottom-8 w-96 glass-panel neon-border-cyan rounded-2xl p-6 z-10"
               >
                 <div className="flex justify-between items-start">
                   <div>
@@ -382,7 +382,7 @@ export default function Report() {
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: 20 }}
-                  className="absolute bottom-6 left-6 right-6 bg-gray-950/90 backdrop-blur-xl border border-gray-700 p-4 rounded-2xl shadow-2xl"
+                  className="absolute bottom-6 left-6 right-6 glass-panel neon-border-cyan p-4 rounded-2xl"
                 >
                   <div className="flex justify-between items-center mb-2">
                     <h3 className="font-bold text-cyan-400">
@@ -435,23 +435,23 @@ export default function Report() {
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.3 }}
-              className="bg-gray-900/40 backdrop-blur-md border border-gray-800 rounded-3xl p-6 shadow-xl"
+              className="glass-panel rounded-3xl p-6"
             >
-              <h2 className="text-xl font-bold mb-6 flex items-center gap-2 text-gray-100">
+              <h2 className="text-xl font-bold mb-6 flex items-center gap-2 text-gray-100 font-serif-sc">
                 <Zap className="w-5 h-5 text-yellow-400" /> 核心枢纽人物 (Top 8)
               </h2>
               <div className="space-y-4">
                 {topCharacters.map(([name, deg]: any, idx) => (
                   <div key={name} className="flex items-center justify-between group">
                     <div className="flex items-center gap-3">
-                      <span className={`w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold ${idx < 3 ? 'bg-cyan-500/20 text-cyan-400' : 'bg-gray-800 text-gray-400'}`}>
+                      <span className={`w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold ${idx < 3 ? 'bg-cyan-500/20 text-cyan-400 neon-border-cyan' : 'bg-gray-800/50 text-gray-400 border border-gray-700'}`}>
                         {idx + 1}
                       </span>
                       <span className={`font-medium ${name === network_analysis.main_character ? 'text-cyan-400 font-bold' : 'text-gray-300'}`}>
                         {name} {name === network_analysis.main_character && '👑'}
                       </span>
                     </div>
-                    <div className="text-sm font-mono text-gray-500 bg-gray-950 px-2 py-1 rounded">
+                    <div className="text-sm font-mono-code text-gray-500 bg-gray-950/50 px-2 py-1 rounded">
                       {(deg * 100).toFixed(1)}
                     </div>
                   </div>
@@ -463,19 +463,19 @@ export default function Report() {
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.4 }}
-              className="bg-gray-900/40 backdrop-blur-md border border-gray-800 rounded-3xl p-6 shadow-xl"
+              className="glass-panel rounded-3xl p-6"
             >
-              <h2 className="text-xl font-bold mb-6 flex items-center gap-2 text-gray-100">
+              <h2 className="text-xl font-bold mb-6 flex items-center gap-2 text-gray-100 font-serif-sc">
                 <Award className="w-5 h-5 text-purple-400" /> 命运脉络推演
               </h2>
-              <div className="space-y-4 overflow-y-auto max-h-[300px] pr-2 scrollbar-thin scrollbar-thumb-gray-800 scrollbar-track-transparent">
+              <div className="space-y-4 overflow-y-auto max-h-[300px] pr-2 custom-scrollbar">
                 {Object.entries(destiny_predictions).slice(0, 4).map(([name, pred]: any) => {
                   const outlook = pred.overall_outlook;
-                  const colorClass = outlook === 'positive' ? 'text-green-400 border-green-500/30 bg-green-500/5' : 
-                                    outlook === 'negative' ? 'text-red-400 border-red-500/30 bg-red-500/5' : 
-                                    'text-yellow-400 border-yellow-500/30 bg-yellow-500/5';
+                  const colorClass = outlook === 'positive' ? 'text-green-400 border-green-500/30 bg-green-500/10 neon-border-cyan' : 
+                                    outlook === 'negative' ? 'text-red-400 border-red-500/30 bg-red-500/10 shadow-[0_0_15px_rgba(239,68,68,0.15)]' : 
+                                    'text-yellow-400 border-yellow-500/30 bg-yellow-500/10 shadow-[0_0_15px_rgba(234,179,8,0.15)]';
                   return (
-                    <div key={name} className={`p-4 rounded-2xl border ${colorClass}`}>
+                    <div key={name} className={`p-4 rounded-2xl border backdrop-blur-md ${colorClass}`}>
                       <div className="flex justify-between items-center mb-2">
                         <h3 className="font-bold text-lg">{name}</h3>
                         <span className="text-xs font-mono opacity-80 border border-current px-2 py-1 rounded-full">
@@ -500,13 +500,13 @@ export default function Report() {
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.5 }}
-              className="bg-gray-900/40 backdrop-blur-md border border-gray-800 rounded-3xl p-6 shadow-xl flex flex-col h-[400px]"
+              className="glass-panel rounded-3xl p-6 flex flex-col h-[400px]"
             >
-              <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-gray-100">
+              <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-gray-100 font-serif-sc">
                 <MessageSquare className="w-5 h-5 text-blue-400" /> 原著知识库问答
               </h2>
               
-              <div className="flex-1 overflow-y-auto space-y-4 mb-4 pr-2 scrollbar-thin scrollbar-thumb-gray-800 scrollbar-track-transparent">
+              <div className="flex-1 overflow-y-auto space-y-4 mb-4 pr-2 custom-scrollbar">
                 {chatHistory.length === 0 ? (
                   <div className="text-sm text-gray-500 text-center mt-10">
                     尝试提问：“楚子航为什么要爆血？”
@@ -514,7 +514,7 @@ export default function Report() {
                 ) : (
                   chatHistory.map((msg, i) => (
                     <div key={i} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-                      <div className={`max-w-[85%] p-3 rounded-2xl text-sm ${msg.role === 'user' ? 'bg-cyan-600 text-white rounded-br-none' : 'bg-gray-800 text-gray-200 rounded-bl-none'}`}>
+                      <div className={`max-w-[85%] p-3 rounded-2xl text-sm ${msg.role === 'user' ? 'bg-cyan-600/80 text-white rounded-br-none neon-border-cyan' : 'glass-panel text-gray-200 rounded-bl-none border-gray-700/50'}`}>
                         {msg.content}
                       </div>
                     </div>
@@ -537,7 +537,7 @@ export default function Report() {
                   onKeyDown={e => e.key === 'Enter' && handleChat()}
                   placeholder="向原著提问..."
                   disabled={isChatting}
-                  className="w-full bg-gray-950 border border-gray-700 rounded-xl py-3 pl-4 pr-12 text-sm focus:outline-none focus:border-cyan-500 text-white"
+                  className="w-full bg-black/40 border border-gray-700 rounded-xl py-3 pl-4 pr-12 text-sm focus:outline-none focus:neon-border-cyan text-white transition-all"
                 />
                 <button 
                   onClick={handleChat}
@@ -562,11 +562,11 @@ export default function Report() {
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xl flex items-center justify-center p-8"
           >
-            <div className="w-full max-w-6xl h-full bg-gray-900 border border-purple-500/30 rounded-2xl flex overflow-hidden shadow-[0_0_50px_rgba(147,51,234,0.2)]">
+            <div className="w-full max-w-6xl h-full glass-panel neon-border-purple rounded-3xl flex overflow-hidden">
               {/* Left Panel: Config */}
-              <div className="w-1/3 bg-gray-900/50 border-r border-gray-800 p-6 flex flex-col">
+              <div className="w-1/3 bg-gray-900/30 border-r border-gray-800 p-6 flex flex-col">
                 <div className="flex justify-between items-center mb-8">
-                  <h2 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-cyan-400">
+                  <h2 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-cyan-400 font-serif-sc">
                     平行世界沙盘
                   </h2>
                   <button onClick={() => setIsSandboxOpen(false)} className="text-gray-400 hover:text-white">
@@ -590,8 +590,8 @@ export default function Report() {
                           }}
                           className={`px-3 py-1 rounded-full text-sm transition-all ${
                             sandboxCharacters.includes(name) 
-                            ? 'bg-purple-600 text-white shadow-[0_0_10px_rgba(147,51,234,0.5)] border border-purple-400' 
-                            : 'bg-gray-800 text-gray-400 border border-gray-700 hover:border-purple-500/50'
+                            ? 'bg-purple-600/80 text-white neon-border-purple' 
+                            : 'bg-black/40 text-gray-400 border border-gray-700 hover:neon-border-purple'
                           }`}
                         >
                           {name}
@@ -606,7 +606,7 @@ export default function Report() {
                       value={sandboxWhatIf}
                       onChange={(e) => setSandboxWhatIf(e.target.value)}
                       placeholder="例如：如果楚子航没有爆血，而是选择向卡塞尔学院求援会怎样？"
-                      className="w-full bg-gray-800 border border-gray-700 rounded-xl p-4 text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 h-32 resize-none"
+                      className="w-full bg-black/40 border border-gray-700 rounded-xl p-4 text-white placeholder-gray-500 focus:outline-none focus:neon-border-cyan h-32 resize-none transition-all"
                     />
                   </div>
                 </div>
@@ -617,7 +617,7 @@ export default function Report() {
                   className={`w-full py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-2 transition-all mt-4 ${
                     isSimulating || sandboxCharacters.length < 2 || !sandboxWhatIf
                     ? 'bg-gray-800 text-gray-500 cursor-not-allowed'
-                    : 'bg-gradient-to-r from-purple-600 to-cyan-600 hover:from-purple-500 hover:to-cyan-500 text-white shadow-[0_0_20px_rgba(147,51,234,0.4)]'
+                    : 'bg-gradient-to-r from-purple-600/80 to-cyan-600/80 hover:from-purple-500 hover:to-cyan-500 text-white neon-border-purple backdrop-blur-md'
                   }`}
                 >
                   {isSimulating ? (
@@ -635,7 +635,7 @@ export default function Report() {
               </div>
               
               {/* Right Panel: Result */}
-              <div className="flex-1 bg-gray-900 p-8 flex flex-col relative">
+              <div className="flex-1 bg-transparent p-8 flex flex-col relative">
                 {!sandboxResult && !isSimulating ? (
                   <div className="flex-1 flex flex-col items-center justify-center text-gray-500">
                     <svg className="w-24 h-24 mb-4 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path></svg>
@@ -650,8 +650,8 @@ export default function Report() {
                   </div>
                 ) : (
                   <div className="flex-1 overflow-y-auto custom-scrollbar pr-4 flex flex-col gap-6">
-                    <div className="bg-purple-900/20 border border-purple-500/30 rounded-xl p-6">
-                      <h3 className="text-purple-400 text-sm font-bold uppercase tracking-wider mb-2">上帝视角总结 (Director's Summary)</h3>
+                    <div className="glass-panel neon-border-purple rounded-xl p-6">
+                      <h3 className="text-purple-400 text-sm font-bold uppercase tracking-wider mb-2 font-serif-sc">上帝视角总结 (Director's Summary)</h3>
                       <p className="text-gray-200 leading-relaxed text-lg">{sandboxResult.summary}</p>
                     </div>
                     
@@ -676,12 +676,12 @@ export default function Report() {
                           </div>
                           <div className="flex-1">
                             <div className="flex items-baseline gap-2 mb-1">
-                              <span className="font-bold text-cyan-400 text-lg">{msg.character}</span>
+                              <span className="font-bold text-cyan-400 text-lg font-serif-sc">{msg.character}</span>
                               {msg.action && <span className="text-sm text-purple-400 italic bg-purple-900/30 px-2 py-0.5 rounded-full border border-purple-500/20">({msg.action})</span>}
                             </div>
-                            <div className="bg-gray-800 border border-gray-700 hover:border-cyan-500/50 transition-colors rounded-2xl rounded-tl-none p-5 text-gray-200 leading-relaxed shadow-lg text-lg relative">
+                            <div className="glass-panel border border-gray-700/50 hover:neon-border-cyan transition-colors rounded-2xl rounded-tl-none p-5 text-gray-200 leading-relaxed shadow-lg text-lg relative">
                               {/* 气泡小尾巴 */}
-                              <div className="absolute -left-2 top-4 w-4 h-4 bg-gray-800 border-l border-t border-gray-700 transform -rotate-45"></div>
+                              <div className="absolute -left-2 top-4 w-4 h-4 glass-panel border-l border-t border-gray-700/50 transform -rotate-45"></div>
                               {msg.content}
                             </div>
                           </div>

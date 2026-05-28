@@ -1,0 +1,123 @@
+<html>
+    <head>
+        <meta charset="utf-8">
+        
+            <script src="lib/bindings/utils.js"></script>
+            <link rel="stylesheet" href="https://cdn.bootcdn.net/ajax/libs/vis/9.1.2/vis-network.min.css" />
+            <script src="https://cdn.bootcdn.net/ajax/libs/vis/9.1.2/vis-network.min.js"></script>
+            
+        
+<center>
+<h1></h1>
+</center>
+
+<!-- <link rel="stylesheet" href="../node_modules/vis/dist/vis.min.css" type="text/css" />
+<script type="text/javascript" src="../node_modules/vis/dist/vis.js"> </script>-->
+        <link
+          href="https://cdn.bootcdn.net/ajax/libs/bootstrap/5.0.2/css/bootstrap.min.css"
+          rel="stylesheet"
+        />
+        <script
+          src="https://cdn.bootcdn.net/ajax/libs/bootstrap/5.0.2/js/bootstrap.bundle.min.js"
+        ></script>
+
+
+        <center>
+          <h1></h1>
+        </center>
+        <style type="text/css">
+
+             #mynetwork {
+                 width: 100%;
+                 height: 600px;
+                 background-color: #ffffff;
+                 border: 1px solid lightgray;
+                 position: relative;
+                 float: left;
+             }
+
+             
+
+             
+
+             
+        </style>
+    </head>
+
+
+    <body>
+        <div class="card" style="width: 100%">
+            
+            
+            <div id="mynetwork" class="card-body"></div>
+        </div>
+
+        
+        
+
+        <script type="text/javascript">
+
+              // initialize global variables.
+              var edges;
+              var nodes;
+              var allNodes;
+              var allEdges;
+              var nodeColors;
+              var originalNodes;
+              var network;
+              var container;
+              var options, data;
+              var filter = {
+                  item : '',
+                  property : '',
+                  value : []
+              };
+
+              
+
+              
+
+              // This method is responsible for drawing the graph, returns the drawn network
+              function drawGraph() {
+                  var container = document.getElementById('mynetwork');
+
+                  
+
+                  // parsing and collecting nodes and edges from the python
+                  nodes = new vis.DataSet([{"color": "#97c2fc", "id": "\u5b9d\u7389", "label": "\u5b9d\u7389", "shape": "dot", "size": 43, "title": "\u4eba\u7269: \u5b9d\u7389"}, {"color": "#97c2fc", "id": "\u9edb\u7389", "label": "\u9edb\u7389", "shape": "dot", "size": 23, "title": "\u4eba\u7269: \u9edb\u7389"}, {"color": "#97c2fc", "id": "\u5b9d\u9497", "label": "\u5b9d\u9497", "shape": "dot", "size": 23, "title": "\u4eba\u7269: \u5b9d\u9497"}, {"color": "#97c2fc", "id": "\u8d3e\u6bcd", "label": "\u8d3e\u6bcd", "shape": "dot", "size": 23, "title": "\u4eba\u7269: \u8d3e\u6bcd"}, {"color": "#97c2fc", "id": "\u738b\u7199\u51e4", "label": "\u738b\u7199\u51e4", "shape": "dot", "size": 16, "title": "\u4eba\u7269: \u738b\u7199\u51e4"}, {"color": "#97c2fc", "id": "\u8d3e\u653f", "label": "\u8d3e\u653f", "shape": "dot", "size": 16, "title": "\u4eba\u7269: \u8d3e\u653f"}, {"color": "#97c2fc", "id": "\u738b\u592b\u4eba", "label": "\u738b\u592b\u4eba", "shape": "dot", "size": 16, "title": "\u4eba\u7269: \u738b\u592b\u4eba"}]);
+                  edges = new vis.DataSet([{"from": "\u5b9d\u7389", "title": "\u5173\u7cfb\u7c7b\u578b: social (\u6743\u91cd: 1)", "to": "\u9edb\u7389", "value": 1}, {"from": "\u5b9d\u7389", "title": "\u5173\u7cfb\u7c7b\u578b: social (\u6743\u91cd: 1)", "to": "\u5b9d\u9497", "value": 1}, {"from": "\u5b9d\u7389", "title": "\u5173\u7cfb\u7c7b\u578b: hierarchical (\u6743\u91cd: 1)", "to": "\u8d3e\u6bcd", "value": 1}, {"from": "\u5b9d\u7389", "title": "\u5173\u7cfb\u7c7b\u578b: hierarchical (\u6743\u91cd: 1)", "to": "\u8d3e\u653f", "value": 1}, {"from": "\u5b9d\u7389", "title": "\u5173\u7cfb\u7c7b\u578b: hierarchical (\u6743\u91cd: 1)", "to": "\u738b\u592b\u4eba", "value": 1}, {"from": "\u9edb\u7389", "title": "\u5173\u7cfb\u7c7b\u578b: conflict (\u6743\u91cd: 1)", "to": "\u5b9d\u9497", "value": 1}, {"from": "\u8d3e\u6bcd", "title": "\u5173\u7cfb\u7c7b\u578b: hierarchical (\u6743\u91cd: 1)", "to": "\u738b\u7199\u51e4", "value": 1}]);
+
+                  nodeColors = {};
+                  allNodes = nodes.get({ returnType: "Object" });
+                  for (nodeId in allNodes) {
+                    nodeColors[nodeId] = allNodes[nodeId].color;
+                  }
+                  allEdges = edges.get({ returnType: "Object" });
+                  // adding nodes and edges to the graph
+                  data = {nodes: nodes, edges: edges};
+
+                  var options = {"physics": {"barnesHut": {"gravitationalConstant": -3000, "centralGravity": 0.3, "springLength": 200, "springConstant": 0.04}, "minVelocity": 0.75}};
+
+                  
+
+
+                  
+
+                  network = new vis.Network(container, data, options);
+
+                  
+
+                  
+
+                  
+
+
+                  
+
+                  return network;
+
+              }
+              drawGraph();
+        </script>
+    </body>
+</html>
