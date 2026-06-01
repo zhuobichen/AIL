@@ -21,6 +21,13 @@ outputs/
 *.sln
 *.sw?
 
+# Environment variables & secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
 # Frontend
 node_modules
 frontend/node_modules/
