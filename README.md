@@ -1,57 +1,28 @@
-# React + TypeScript + Vite
+# 数字人文叙事 AI 分析引擎
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+> 基于大语言模型的叙事文本分析：人物关系网络抽取与可视化、人物画像与叙事生成。
 
-Currently, two official plugins are available:
+## 功能
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **人物关系网络**：从文本中抽取人物关系，生成交互式关系图（vis-network）
+- **人物画像**：LLM 驱动的角色分析
+- **叙事生成**：AI 叙事报告与命运推演
 
-## Expanding the ESLint configuration
+## 入口
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+| 入口 | 说明 |
+|------|------|
+| `ai_cli.py` | 终端 CLI（typer + rich，美观排版） |
+| `app.py` | Streamlit Web 界面 |
+| `examples/` | 示例分析（如名著人物关系网络） |
 
-```js
-export default tseslint.config({
-  extends: [
-    // Remove ...tseslint.configs.recommended and replace with this
-    ...tseslint.configs.recommendedTypeChecked,
-    // Alternatively, use this for stricter rules
-    ...tseslint.configs.strictTypeChecked,
-    // Optionally, add this for stylistic rules
-    ...tseslint.configs.stylisticTypeChecked,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
-```
+## 技术栈
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Python（Streamlit / NetworkX / Typer）+ 前端 React（Vite + TypeScript）。
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## 示例
 
-export default tseslint.config({
-  extends: [
-    // other configs...
-    // Enable lint rules for React
-    reactX.configs['recommended-typescript'],
-    // Enable lint rules for React DOM
-    reactDom.configs.recommended,
-  ],
-  languageOptions: {
-    // other options...
-    parserOptions: {
-      project: ['./tsconfig.node.json', './tsconfig.app.json'],
-      tsconfigRootDir: import.meta.dirname,
-    },
-  },
-})
+```bash
+python ai_cli.py --help
+streamlit run app.py
 ```
