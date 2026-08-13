@@ -1,5 +1,5 @@
 import React from 'react';
-import { useOrigamiStore, ToolMode } from '../store/useOrigamiStore';
+import { useOrigamiStore, ToolMode } from './useOrigamiStore';
 
 export function UIOverlay() {
   const { 

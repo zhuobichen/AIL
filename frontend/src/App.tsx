@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import Home from "@/pages/Home";
 import Task from "@/pages/Task";
 import Report from "@/pages/Report";
+import OrigamiApp from "@/origami/OrigamiApp";
 
 export default function App() {
   return (
@@ -11,6 +12,7 @@ export default function App() {
           <Route path="/" element={<Home />} />
           <Route path="/task/:taskId" element={<Task />} />
           <Route path="/report/:taskId" element={<Report />} />
+          <Route path="/origami" element={<OrigamiApp />} />
         </Routes>
       </div>
     </Router>

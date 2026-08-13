@@ -3,7 +3,7 @@ import { Canvas } from '@react-three/fiber';
 import { OrbitControls, ContactShadows } from '@react-three/drei';
 import { EffectComposer, N8AO } from '@react-three/postprocessing';
 import { OrigamiPaper } from './OrigamiPaper';
-import { useOrigamiStore } from '../store/useOrigamiStore';
+import { useOrigamiStore } from './useOrigamiStore';
 
 export function OrigamiScene() {
   const { mode, snapToGrid } = useOrigamiStore();

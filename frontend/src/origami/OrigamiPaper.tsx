@@ -1,9 +1,9 @@
 import React, { useRef, useMemo } from 'react';
 import { ThreeEvent, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { useOrigamiStore } from '../store/useOrigamiStore';
-import { getPaperBumpMap } from '../utils/textureGen';
-import { playPaperSound } from '../utils/audio';
+import { useOrigamiStore } from './useOrigamiStore';
+import { getPaperBumpMap } from './textureGen';
+import { playPaperSound } from './audio';
 import { useSpring } from '@react-spring/three';
 
 export function OrigamiPaper() {
