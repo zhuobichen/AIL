@@ -18,5 +18,6 @@ setup(
         "textblob>=0.17",
         "numpy>=1.24",
         "pandas>=2.0",
+        "diskcache>=5.6",
     ],
 )
