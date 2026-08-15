@@ -223,8 +223,8 @@ class CharacterProfiler(BaseCharacterProfiler):
         return profile
 
     def profile_all(
-        self, characters: list[str], text: str, relations: list[Relation]
-    ) -> Dict[str, CharacterProfile]:
+        self, characters: list[str], texts: list[str]
+    ) -> List[CharacterProfile]:
         """批量刻画所有人物
 
         Args:
@@ -234,11 +234,10 @@ class CharacterProfiler(BaseCharacterProfiler):
         Returns:
             CharacterProfile 对象列表
         """
-        return {c: self.profile_character(c, [text], characters) for c in characters}
-        
+        return [self.profile_character(c, texts, characters) for c in characters]
+
     async def profile_all_async(self, characters: list[str], text: str, relations: list[Relation]) -> Dict[str, CharacterProfile]:
-        # 为兼容接口定义，暂时转交老方法
-        pass
+        return {c: self.profile_character(c, [text], characters) for c in characters}
 
     def _analyze_traits(self, texts: list[str]) -> dict[str, float]:
         """分析性格特质"""

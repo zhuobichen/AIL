@@ -70,7 +70,7 @@ class NarrativePipeline:
         self.dynamics_analyzer = RelationshipDynamicsAnalyzer()
         self.destiny_predictor = DestinyPredictor()
 
-    def run(self, texts: list[str], verbose: bool = True) -> NarrativeAnalysisResult:
+    def run(self, texts: list[str], book: str = "", verbose: bool = True) -> NarrativeAnalysisResult:
         """执行完整分析流水线
 
         Args:
@@ -136,7 +136,7 @@ class NarrativePipeline:
         try:
             from src.rag.knowledge_base import RAGKnowledgeBase
             rag_db = RAGKnowledgeBase()
-            rag_db.add_texts(converted_texts, book)
+            rag_db.add_texts(converted_texts, book or "未命名文本")
             if verbose:
                 print("  RAG 向量知识库构建完成！")
         except Exception as e:
@@ -170,6 +170,7 @@ class NarrativePipeline:
             betweenness_centrality=stats.betweenness_centrality,
             communities=stats.communities,
             main_character=stats.main_character or "",
+            density=stats.density,
             graph_data=nx.node_link_data(G),
             temporal_graphs=None
         )
@@ -287,21 +288,21 @@ class NarrativePipeline:
         results = self.run(texts, verbose=False)
 
         return {
-            "num_texts": results["num_texts"],
-            "num_characters": len(results["characters"]),
-            "characters": results["characters"],
-            "main_character": results["network_analysis"].get("main_character"),
-            "num_events": len(results["events"]),
+            "num_texts": results.num_texts,
+            "num_characters": len(results.characters),
+            "characters": results.characters,
+            "main_character": results.network_analysis.main_character,
+            "num_events": len(results.events),
             "profiles": [
                 {
-                    "name": p["name"],
-                    "role": p["role_in_story"],
-                    "summary": p.get("personality_summary", ""),
+                    "name": p.name,
+                    "role": p.role_in_story,
+                    "summary": p.personality_summary,
                 }
-                for p in results["profiles"]
+                for p in results.profiles
             ],
-            "network_density": results["network_analysis"].get("density", 0),
-            "themes": results["summary"].get("themes", []),
+            "network_density": results.network_analysis.density,
+            "themes": results.summary.get("themes", []),
         }
 
     def visualize_network(

@@ -132,6 +132,7 @@ class NetworkAnalysis(BaseModel):
     betweenness_centrality: Dict[str, float]
     communities: List[List[str]]
     main_character: str
+    density: float = 0.0
     graph_data: Dict
     temporal_graphs: Optional[List[Dict]] = Field(default=None, description="按时间/章节序列演化的图谱快照")
 

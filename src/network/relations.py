@@ -335,11 +335,12 @@ class RelationshipExtractor(BaseRelationshipExtractor):
             neg_count = sum(1 for w in negative_words if w in context)
             total = pos_count + neg_count
             if total == 0:
-                rel.sentiment = 0.5  # 中性
+                rel.sentiment = "neutral"
             else:
-                sentiment = (pos_count - neg_count) / total
-                # 归一化到 [0, 1]
-                rel.sentiment = (sentiment + 1) / 2
+                sentiment = (pos_count - neg_count) / total  # [-1, 1]
+                rel.sentiment = (
+                    "positive" if sentiment > 0 else ("negative" if sentiment < 0 else "neutral")
+                )
 
         return relations
 
